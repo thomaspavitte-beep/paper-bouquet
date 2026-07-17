@@ -82,15 +82,24 @@ const app = document.getElementById("app")!;
 app.innerHTML = `
   <style>
     * { box-sizing: border-box; margin: 0; }
-    body { font-family: ui-monospace, "SF Mono", Menlo, monospace; background: #1e1c1a; color: #e8e0d2; }
-    #app { display: flex; flex-direction: column; min-height: 100vh; }
-    header { padding: 16px 24px 10px; }
-    h1 { font-size: 16px; font-weight: 600; }
-    .sub { font-size: 12px; opacity: 0.6; margin-top: 2px; }
-    .layout { display: flex; gap: 18px; padding: 0 24px 24px; align-items: flex-start; flex: 1; }
-    #stage { flex: 1; display: flex; justify-content: center; }
-    #stage svg { border-radius: 12px; display: block; }
-    #panel { width: 250px; flex-shrink: 0; display: flex; flex-direction: column; gap: 14px; }
+    body { font-family: ui-monospace, "SF Mono", Menlo, monospace; transition: background 0.4s ease; }
+    h1 { font-size: 16px; font-weight: 600; position: fixed; top: 18px; left: 22px; color: var(--ink, #2b2825); z-index: 3; }
+    .float-buttons { position: fixed; top: 14px; right: 18px; display: flex; gap: 8px; z-index: 4; }
+    .float-buttons button {
+      background: transparent; color: var(--ink, #2b2825); border-color: var(--ink, #2b2825);
+      opacity: 0.75;
+    }
+    .float-buttons button:hover { opacity: 1; }
+    #stage.full { position: fixed; inset: 0; }
+    #stage.full svg { width: 100vw; height: 100vh; display: block; }
+    #stage.grid-mode { padding: 64px 22px 22px; }
+    #panel {
+      position: fixed; top: 56px; right: 18px; width: 252px; max-height: calc(100vh - 76px);
+      overflow-y: auto; z-index: 3; display: none; flex-direction: column; gap: 14px;
+      background: #211f1d; color: #e8e0d2; padding: 16px; border-radius: 12px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.28);
+    }
+    #panel.open { display: flex; }
     .section .heading { font-size: 11px; opacity: 0.55; margin-bottom: 6px; }
     .row { display: flex; gap: 6px; align-items: center; }
     .row.checks { margin-top: 6px; gap: 12px; }
@@ -100,7 +109,7 @@ app.innerHTML = `
       font: inherit; font-size: 12px; padding: 5px 10px; cursor: pointer;
       border: 1px solid #4a453e; border-radius: 6px; background: #2b2825; color: #e8e0d2;
     }
-    button.active { background: #e8e0d2; color: #1e1c1a; border-color: #e8e0d2; }
+    #panel button.active { background: #e8e0d2; color: #1e1c1a; border-color: #e8e0d2; }
     button.wide { width: 100%; padding: 8px; }
     input[type="number"] {
       font: inherit; font-size: 12px; width: 84px; padding: 5px 8px;
@@ -109,22 +118,28 @@ app.innerHTML = `
     .slider-row { display: grid; grid-template-columns: 52px 1fr 34px; gap: 8px; align-items: center; margin: 5px 0; font-size: 12px; }
     .slider-row em { font-style: normal; opacity: 0.65; font-size: 11px; text-align: right; }
     input[type="range"] { accent-color: #e8e0d2; width: 100%; }
-    .sheet { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; width: 100%; }
+    .sheet { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
     .sheet .cell { position: relative; }
     .sheet svg { width: 100%; height: auto; }
-    .sheet .tag { position: absolute; top: 8px; left: 10px; font-size: 10px; opacity: 0.65; color: #1e1c1a; mix-blend-mode: multiply; }
+    .sheet .tag { position: absolute; top: 8px; left: 10px; font-size: 10px; opacity: 0.6; color: var(--ink, #2b2825); }
   </style>
-  <header>
-    <h1>Paper Bouquet</h1>
-    <div class="sub">A generative bouquet in cut paper. Every seed grows a new one.</div>
-  </header>
-  <div class="layout">
-    <div id="stage"></div>
-    <div id="panel"></div>
+  <h1>Paper Bouquet</h1>
+  <div class="float-buttons">
+    <button id="quickDice" title="grow a new bouquet">dice</button>
+    <button id="settingsToggle" title="open and close the settings">settings</button>
   </div>
+  <div id="stage"></div>
+  <div id="panel"></div>
 `;
 
 const stage = document.getElementById("stage")!;
+
+/* readable chrome colour for whatever ground the palette brings */
+function inkFor(ground: string): string {
+  const n = parseInt(ground.slice(1), 16);
+  const lum = 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+  return lum > 140 ? "#2b2825" : "#f2e8d5";
+}
 
 function bouquetSvg(vaseSeed: number, bloomSeed: number, showTag: boolean): string {
   const palette = PALETTES[state.paletteIndex]!;
@@ -142,7 +157,7 @@ function bouquetSvg(vaseSeed: number, bloomSeed: number, showTag: boolean): stri
   const tag = showTag ? `<div class="tag">${bloomSeed}</div>` : "";
   return `
     <div class="cell">${tag}
-      <svg viewBox="-165 -345 330 510" ${state.view === "bouquet" ? `width="430"` : ""} style="background:${palette.ground}">
+      <svg viewBox="-165 -345 330 510">
         ${arr.markup}
         <g class="pb-vase">${vase.markup}</g>
       </svg>
@@ -156,7 +171,7 @@ function vaseSvg(seed: number, showTag: boolean): string {
   const tag = showTag ? `<div class="tag">${seed} ${vase.silhouette}</div>` : "";
   return `
     <div class="cell">${tag}
-      <svg viewBox="-110 -12 220 174" style="background:${palette.ground}">
+      <svg viewBox="-110 -12 220 174">
         <g transform="translate(0 ${150 - vase.height})">${vase.markup}</g>
       </svg>
     </div>`;
@@ -167,31 +182,56 @@ function render(animate: boolean) {
   growHandle = null;
   liveOpts.speed = state.speed;
   liveOpts.sway = state.sway;
+
+  // the browser itself is the paper: ground colour everywhere, chrome ink
+  // picked for contrast against it
+  const ground = PALETTES[state.paletteIndex]!.ground;
+  document.body.style.background = ground;
+  document.documentElement.style.setProperty("--ink", inkFor(ground));
+
   if (state.view === "bouquet") {
+    stage.className = "full";
+    document.body.style.overflow = "hidden";
     stage.innerHTML = bouquetSvg(state.vaseSeed, state.bloomSeed, false);
-    if (animate) {
-      const svg = stage.querySelector<SVGSVGElement>("svg");
-      if (svg) growHandle = grow(svg, state.bloomSeed, liveOpts);
+    const svg = stage.querySelector<SVGSVGElement>("svg");
+    if (svg) {
+      // fit the frame to this bouquet so it fills the window
+      const bb = svg.getBBox();
+      const pad = 24;
+      svg.setAttribute("viewBox", `${bb.x - pad} ${bb.y - pad} ${bb.width + pad * 2} ${bb.height + pad * 2}`);
+      if (animate) growHandle = grow(svg, state.bloomSeed, liveOpts);
     }
-  } else if (state.view === "sheet") {
-    let cells = "";
-    for (let i = 0; i < 12; i++) cells += bouquetSvg(state.vaseSeed + i, state.bloomSeed + i, true);
-    stage.innerHTML = `<div class="sheet">${cells}</div>`;
   } else {
+    stage.className = "grid-mode";
+    document.body.style.overflow = "auto";
+    const make = state.view === "sheet" ? (i: number) => bouquetSvg(state.vaseSeed + i, state.bloomSeed + i, true) : (i: number) => vaseSvg(state.vaseSeed + i, true);
     let cells = "";
-    for (let i = 0; i < 12; i++) cells += vaseSvg(state.vaseSeed + i, true);
+    for (let i = 0; i < 12; i++) cells += make(i);
     stage.innerHTML = `<div class="sheet">${cells}</div>`;
   }
   writeURL();
   panel.sync();
 }
 
-const panel = createPanel(document.getElementById("panel")!, state, {
-  onDice() {
-    if (!state.lockVase) state.vaseSeed = state.seed;
-    if (!state.lockBlooms) state.bloomSeed = state.seed;
-    render(true);
-  },
+function applyDice() {
+  if (!state.lockVase) state.vaseSeed = state.seed;
+  if (!state.lockBlooms) state.bloomSeed = state.seed;
+  render(true);
+}
+
+const panelEl = document.getElementById("panel")!;
+const toggleBtn = document.getElementById("settingsToggle") as HTMLButtonElement;
+toggleBtn.addEventListener("click", () => {
+  const open = panelEl.classList.toggle("open");
+  toggleBtn.textContent = open ? "close" : "settings";
+});
+document.getElementById("quickDice")!.addEventListener("click", () => {
+  state.seed = Date.now() % 1000000;
+  applyDice();
+});
+
+const panel = createPanel(panelEl, state, {
+  onDice: applyDice,
   onReplay() {
     if (state.view !== "bouquet") state.view = "bouquet";
     render(true);
