@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 166.93 170.83">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #d3a905;
+      }
+
+      .cls-2 {
+        fill: #fe97d1;
+      }
+    </style>
+  </defs>
+  <g id="Layer_1-2" data-name="Layer 1">
+    <g>
+      <circle id="Petal" class="cls-1" cx="125.79" cy="118.51" r="35.38"/>
+      <circle id="Petal-2" data-name="Petal" class="cls-1" cx="133.75" cy="61.63" r="33.18"/>
+      <circle id="Petal-3" data-name="Petal" class="cls-1" cx="90.2" cy="32.37" r="32.37"/>
+      <circle id="Petal-4" data-name="Petal" class="cls-1" cx="46.22" cy="51.47" r="33.01"/>
+      <circle id="Petal-5" data-name="Petal" class="cls-1" cx="33.01" cy="103.44" r="33.01"/>
+      <circle id="Petal-6" data-name="Petal" class="cls-1" cx="72.63" cy="137.81" r="33.01"/>
+      <circle id="Seed" class="cls-2" cx="84.82" cy="81.94" r="34.71"/>
+    </g>
+  </g>
+</svg>

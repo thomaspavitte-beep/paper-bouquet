@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 226.53 234.38">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #d3a905;
+      }
+
+      .cls-2 {
+        fill: #adaaed;
+      }
+    </style>
+  </defs>
+  <g id="Layer_1-2" data-name="Layer 1">
+    <g>
+      <polygon id="Petal" class="cls-2" points="39.62 26.01 134.09 229.18 180.82 211.91 92.44 0 39.62 26.01"/>
+      <polygon id="Petal-2" data-name="Petal" class="cls-2" points="127.99 0 59.43 218.51 101.07 234.38 174.21 18.9 127.99 0"/>
+      <polygon id="Petal-3" data-name="Petal" class="cls-2" points="202.15 47.34 3.56 149.92 25.4 193.62 224.5 91.53 202.15 47.34"/>
+      <polygon id="Petal-4" data-name="Petal" class="cls-2" points="226.53 142.94 14.73 64.32 0 110.7 208.75 187.02 226.53 142.94"/>
+      <circle id="Seed" class="cls-1" cx="114.03" cy="123.53" r="35.82"/>
+    </g>
+  </g>
+</svg>

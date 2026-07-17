@@ -1,0 +1,150 @@
+{
+  "assets": [
+    {
+      "id": "head-dot-daisy",
+      "file": "heads/head-dot-daisy.svg",
+      "type": "head",
+      "slots": [
+        "primary",
+        "centre"
+      ],
+      "attach": [
+        0.8,
+        -2
+      ],
+      "flip": true,
+      "sizeClass": "medium"
+    },
+    {
+      "id": "head-swoop",
+      "file": "heads/head-swoop.svg",
+      "type": "head",
+      "slots": [
+        "primary",
+        "centre"
+      ],
+      "attach": [
+        -1.1,
+        -0.8
+      ],
+      "flip": true,
+      "sizeClass": "large"
+    },
+    {
+      "id": "head-scallop-burst",
+      "file": "heads/head-scallop-burst.svg",
+      "type": "head",
+      "slots": [
+        "primary",
+        "detail",
+        "centre"
+      ],
+      "attach": [
+        1.2,
+        3.9
+      ],
+      "flip": true,
+      "sizeClass": "large"
+    },
+    {
+      "id": "head-pinwheel",
+      "file": "heads/head-pinwheel.svg",
+      "type": "head",
+      "slots": [
+        "primary",
+        "centre"
+      ],
+      "attach": [
+        0,
+        0
+      ],
+      "flip": true,
+      "sizeClass": "medium"
+    },
+    {
+      "id": "head-starburst",
+      "file": "heads/head-starburst.svg",
+      "type": "head",
+      "slots": [
+        "primary",
+        "centre"
+      ],
+      "attach": [
+        0.3,
+        2.7
+      ],
+      "flip": true,
+      "sizeClass": "medium"
+    },
+    {
+      "id": "head-tulip-crown",
+      "file": "heads/head-tulip-crown.svg",
+      "type": "head",
+      "slots": [
+        "primary"
+      ],
+      "attach": [
+        0,
+        49.2
+      ],
+      "flip": true,
+      "sizeClass": "medium"
+    },
+    {
+      "id": "head-tulip-wide",
+      "file": "heads/head-tulip-wide.svg",
+      "type": "head",
+      "slots": [
+        "primary"
+      ],
+      "attach": [
+        0,
+        34.9
+      ],
+      "flip": true,
+      "sizeClass": "medium"
+    },
+    {
+      "id": "leaf-almond",
+      "file": "leaves/leaf-almond.svg",
+      "type": "leaf",
+      "slots": [
+        "primary"
+      ],
+      "attach": [
+        -36.4,
+        50
+      ],
+      "flip": true,
+      "sizeClass": "medium"
+    },
+    {
+      "id": "leaf-broad",
+      "file": "leaves/leaf-broad.svg",
+      "type": "leaf",
+      "slots": [
+        "primary"
+      ],
+      "attach": [
+        -38.1,
+        50
+      ],
+      "flip": true,
+      "sizeClass": "medium"
+    },
+    {
+      "id": "leaf-teardrop",
+      "file": "leaves/leaf-teardrop.svg",
+      "type": "leaf",
+      "slots": [
+        "primary"
+      ],
+      "attach": [
+        -31.7,
+        -50
+      ],
+      "flip": true,
+      "sizeClass": "small"
+    }
+  ]
+}

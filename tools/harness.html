@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paper Bouquet asset harness</title>
+<style>
+  :root {
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    background: #1e1c1a;
+    color: #e8e0d2;
+    padding: 24px;
+  }
+  h1 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .sub { font-size: 12px; opacity: 0.6; margin-bottom: 16px; }
+  .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+  .toolbar button {
+    font: inherit; font-size: 12px; padding: 5px 12px; cursor: pointer;
+    border: 1px solid #4a453e; border-radius: 6px; background: #2b2825; color: #e8e0d2;
+  }
+  .toolbar button.active { background: #e8e0d2; color: #1e1c1a; border-color: #e8e0d2; }
+  .toolbar label { font-size: 12px; display: flex; gap: 5px; align-items: center; cursor: pointer; }
+  .grid { display: flex; flex-direction: column; gap: 18px; }
+  .card {
+    border: 1px solid #3a362f; border-radius: 10px; padding: 14px 16px;
+    display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap;
+  }
+  .meta { width: 190px; flex-shrink: 0; font-size: 11px; line-height: 1.7; }
+  .meta .id { font-size: 13px; font-weight: 600; }
+  .meta .warn { color: #ff7b5f; font-weight: 600; }
+  .meta .ok { color: #8fc98f; }
+  .cells { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
+  .cell { text-align: center; }
+  .cell .label { font-size: 10px; opacity: 0.55; margin-top: 4px; }
+  .cell svg { display: block; border-radius: 6px; }
+</style>
+</head>
+<body>
+<h1>Paper Bouquet asset harness</h1>
+<div class="sub">Every asset at three scales, unflipped and flipped, attach point crosshaired, sample stem drawn into it. Colours come from the active palette.</div>
+<div class="toolbar" id="paletteBar">
+  <label><input type="checkbox" id="cycle" checked> auto-cycle palettes</label>
+</div>
+<div class="grid" id="grid"></div>
+
+<script>
+// harness palettes: ground + stem/green + slot assignments for head assets.
+// Leaves override --primary to the palette green (the generator will do the
+// same at instantiation time).
+const PALETTES = [
+  { name: "reference", ground: "#f2e8d5", stem: "#327247",
+    slots: { primary: "#e35621", secondary: "#3076d9", centre: "#d3a905", accent: "#fe97d1", detail: "#f2e8d5" } },
+  { name: "cobalt", ground: "#f2e8d5", stem: "#2c5e3f",
+    slots: { primary: "#3076d9", secondary: "#fe97d1", centre: "#e35621", accent: "#d3a905", detail: "#f2e8d5" } },
+  { name: "pink-lilac", ground: "#f7efe2", stem: "#3d7a52",
+    slots: { primary: "#fe97d1", secondary: "#adaaed", centre: "#d3a905", accent: "#e35621", detail: "#f7efe2" } },
+  { name: "night", ground: "#22304a", stem: "#7fae8e",
+    slots: { primary: "#f2e8d5", secondary: "#fe97d1", centre: "#d3a905", accent: "#adaaed", detail: "#22304a" } },
+];
+const SCALES = [0.3, 1.0, 2.5];
+
+const grid = document.getElementById("grid");
+const paletteBar = document.getElementById("paletteBar");
+const cycleBox = document.getElementById("cycle");
+let activePalette = 0;
+
+function applyPalette(i) {
+  activePalette = i;
+  const p = PALETTES[i];
+  document.querySelectorAll(".asset-root").forEach((el) => {
+    const isLeaf = el.dataset.type === "leaf";
+    for (const [slot, colour] of Object.entries(p.slots)) {
+      el.style.setProperty("--" + slot, isLeaf && slot === "primary" ? p.stem : colour);
+    }
+    el.style.setProperty("--stem", p.stem);
+    el.style.setProperty("--ground", p.ground);
+  });
+  document.querySelectorAll(".cell svg").forEach((s) => (s.style.background = p.ground));
+  document.querySelectorAll("#paletteBar button").forEach((b, j) => b.classList.toggle("active", j === i));
+}
+
+PALETTES.forEach((p, i) => {
+  const b = document.createElement("button");
+  b.textContent = p.name;
+  b.addEventListener("click", () => { cycleBox.checked = false; applyPalette(i); });
+  paletteBar.insertBefore(b, paletteBar.firstChild.nextSibling ? paletteBar.querySelector("label") : null);
+});
+
+setInterval(() => {
+  if (cycleBox.checked) applyPalette((activePalette + 1) % PALETTES.length);
+}, 2200);
+
+function cell(inner, attach, k, flipped, label) {
+  // cell coordinate space sized to the scaled asset plus stem room below
+  const half = 50 * k + 8;
+  const stemDrop = Math.max(30, 30 * k);
+  const w = half * 2, h = half * 2 + stemDrop;
+  const sx = flipped ? -k : k;
+  const ax = attach[0] * sx, ay = attach[1] * k;
+  const px = Math.max(46, Math.round(110 * k)); // on-screen size, keeps relative scale visible
+  return `
+    <div class="cell">
+      <svg width="${px}" height="${Math.round((px * h) / w)}" viewBox="${-half} ${-half} ${w} ${h}">
+        <path d="M ${ax} ${half + stemDrop - 4} Q ${ax - 6 * k} ${ay + (half + stemDrop - ay) / 2} ${ax} ${ay}"
+              fill="none" stroke="var(--stem)" stroke-width="${Math.max(1.5, 2.5 * k)}" stroke-linecap="round"/>
+        <g transform="scale(${sx} ${k})">${inner}</g>
+        <g stroke="#e03131" stroke-width="${Math.max(0.8, 1.2 * k)}">
+          <line x1="${ax - 6 * k}" y1="${ay}" x2="${ax + 6 * k}" y2="${ay}"/>
+          <line x1="${ax}" y1="${ay - 6 * k}" x2="${ax}" y2="${ay + 6 * k}"/>
+        </g>
+      </svg>
+      <div class="label">${label}</div>
+    </div>`;
+}
+
+async function build() {
+  const manifest = await fetch("/assets/manifest.json").then((r) => r.json());
+  for (const a of manifest.assets) {
+    const text = await fetch("/assets/" + a.file).then((r) => r.text());
+    const bytes = new Blob([text]).size;
+    const inner = text.replace(/^[\s\S]*?<svg[^>]*>/, "").replace(/<\/svg>\s*$/, "");
+    const attachAttr = text.match(/data-attach="([^"]+)"/)?.[1];
+    const attach = attachAttr ? attachAttr.split(",").map(Number) : a.attach;
+    const noFlip = /data-no-flip/.test(text) || a.flip === false;
+
+    const card = document.createElement("div");
+    card.className = "card asset-root";
+    card.dataset.type = a.type;
+
+    const cells = [];
+    for (const k of SCALES) cells.push(cell(inner, attach, k, false, "×" + k));
+    cells.push(noFlip ? "" : cell(inner, attach, 1.0, true, "×1 flipped"));
+
+    const sizeNote = bytes > 4096
+      ? `<span class="warn">${bytes} B — OVER 4 KB</span>`
+      : `<span class="ok">${bytes} B</span>`;
+    card.innerHTML = `
+      <div class="meta">
+        <div class="id">${a.id}</div>
+        <div>${a.type} / ${a.sizeClass}</div>
+        <div>slots: ${a.slots.join(", ")}</div>
+        <div>attach: ${attach.join(", ")}</div>
+        <div>flip: ${a.flip}</div>
+        <div>${sizeNote}</div>
+      </div>
+      <div class="cells">${cells.join("")}</div>`;
+    grid.appendChild(card);
+  }
+  applyPalette(0);
+}
+build();
+</script>
+</body>
+</html>

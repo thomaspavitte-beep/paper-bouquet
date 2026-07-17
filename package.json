@@ -1,0 +1,19 @@
+{
+  "name": "paper-bouquet",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 4643 --strictPort",
+    "build": "tsc && vite build",
+    "preview": "vite preview --port 4643 --strictPort",
+    "normalise": "tsx tools/normalise.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "svgo": "^3.3.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
+  }
+}

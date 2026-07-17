@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 254.53 254.53">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #d3a905;
+      }
+
+      .cls-2 {
+        fill: #e35621;
+      }
+    </style>
+  </defs>
+  <g id="Layer_1-2" data-name="Layer 1">
+    <g>
+      <rect id="Petal" class="cls-2" x="109.11" y="1.09" width="36.31" height="252.34" transform="translate(-32.96 45.29) rotate(-17.91)"/>
+      <rect id="Petal-2" data-name="Petal" class="cls-2" x="109.11" y="1.09" width="36.31" height="252.34" transform="translate(27.75 -22.7) rotate(11.43)"/>
+      <rect id="Petal-3" data-name="Petal" class="cls-2" x="109.11" y="1.09" width="36.31" height="252.34" transform="translate(114.73 -52.28) rotate(41.01)"/>
+      <rect id="Petal-4" data-name="Petal" class="cls-2" x="109.11" y="1.09" width="36.31" height="252.34" transform="translate(209.23 -32.96) rotate(72.09)"/>
+      <rect id="Petal-5" data-name="Petal" class="cls-2" x="109.11" y="1.09" width="36.31" height="252.34" transform="translate(277.23 27.75) rotate(101.43)"/>
+      <rect id="Petal-6" data-name="Petal" class="cls-2" x="109.11" y="1.09" width="36.31" height="252.34" transform="translate(307.07 119.35) rotate(132.48)"/>
+      <circle id="Seed" class="cls-1" cx="127.26" cy="127.26" r="35.82"/>
+    </g>
+  </g>
+</svg>
