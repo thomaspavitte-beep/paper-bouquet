@@ -22,7 +22,7 @@ export interface GrowHandle {
 }
 
 interface Piece {
-  el: SVGGElement;
+  el: SVGGraphicsElement;
   at: { x: number; y: number };
   triggerAt: number; // ms on the master clock
   dur: number;
@@ -112,10 +112,63 @@ export function grow(svg: SVGSVGElement, seed: number, opts: GrowOptions = { spe
 
   // collect pieces and blooms with trigger times mapped through the easing
   let lastEvent = VASE_DUR;
+
+  /* heads normalised with --keep-parts have one element per petal: petals
+     unfold one by one around the flower, then the seed pops on top. Petal
+     scale transforms act in asset-local space, where the head centre is the
+     origin, so scale(s) alone blooms each petal outward from the centre. */
+  const bloomParts = (pieceEl: SVGGElement): SVGGraphicsElement[] | null => {
+    const inner = pieceEl.querySelector<SVGGElement>(":scope > g");
+    if (!inner) return null;
+    const parts = [...inner.children].filter(
+      (c): c is SVGGraphicsElement => c instanceof SVGGraphicsElement,
+    );
+    return parts.length >= 3 ? parts : null;
+  };
+
   units.forEach((u, ui) => {
     for (const el of u.rotEls) {
       for (const pieceEl of el.querySelectorAll<SVGGElement>(".pb-piece, .pb-bloom")) {
         const isBloom = pieceEl.classList.contains("pb-bloom");
+        const parts = isBloom ? bloomParts(pieceEl) : null;
+
+        if (isBloom && parts) {
+          const primaries = parts
+            .filter((p) => p.getAttribute("fill") === "var(--primary)")
+            .map((p) => {
+              const b = p.getBBox();
+              return { p, cx: b.x + b.width / 2, cy: b.y + b.height / 2 };
+            });
+          // petals around the flower unfold clockwise from the top; layered
+          // flowers (all parts near the centre) keep their stacking order
+          if (primaries.some((w) => Math.hypot(w.cx, w.cy) > 12)) {
+            primaries.sort(
+              (a, b) =>
+                ((Math.atan2(a.cx, -a.cy) + Math.PI * 2) % (Math.PI * 2)) -
+                ((Math.atan2(b.cx, -b.cy) + Math.PI * 2) % (Math.PI * 2)),
+            );
+          }
+          const seq: SVGGraphicsElement[] = [
+            ...primaries.map((w) => w.p),
+            ...parts.filter((p) => p.getAttribute("fill") !== "var(--primary)"),
+          ];
+          const base = u.start + u.dur - 70 / speed;
+          const stagger = 85 / speed;
+          seq.forEach((partEl, i) => {
+            const isSeed = i >= primaries.length;
+            const piece: Piece = {
+              el: partEl,
+              at: { x: 0, y: 0 },
+              triggerAt: base + i * stagger + (isSeed ? 50 / speed : 0),
+              dur: (isSeed ? 470 : 300) / speed,
+              overshoot: isSeed ? 1.7 : 1.25,
+            };
+            units[ui]!.pieces.push(piece);
+            lastEvent = Math.max(lastEvent, piece.triggerAt + piece.dur);
+          });
+          continue;
+        }
+
         const t = isBloom ? 1 : Number(pieceEl.dataset.t ?? 1);
         const triggerAt = isBloom
           ? u.start + u.dur - 70 / speed

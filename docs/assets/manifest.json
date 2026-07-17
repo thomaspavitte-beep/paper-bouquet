@@ -13,7 +13,8 @@
         -2
       ],
       "flip": true,
-      "sizeClass": "medium"
+      "sizeClass": "medium",
+      "parts": true
     },
     {
       "id": "head-swoop",
@@ -28,7 +29,8 @@
         -0.8
       ],
       "flip": true,
-      "sizeClass": "large"
+      "sizeClass": "large",
+      "parts": true
     },
     {
       "id": "head-scallop-burst",
@@ -44,7 +46,8 @@
         3.9
       ],
       "flip": true,
-      "sizeClass": "large"
+      "sizeClass": "large",
+      "parts": true
     },
     {
       "id": "head-pinwheel",
@@ -59,7 +62,8 @@
         0
       ],
       "flip": true,
-      "sizeClass": "medium"
+      "sizeClass": "medium",
+      "parts": true
     },
     {
       "id": "head-starburst",
@@ -74,7 +78,8 @@
         2.7
       ],
       "flip": true,
-      "sizeClass": "medium"
+      "sizeClass": "medium",
+      "parts": true
     },
     {
       "id": "head-tulip-crown",

@@ -19,9 +19,15 @@
     --size <s>             large | medium | small (required)
     --attach <spec>        "x,y" in raw coordinates, or bottom | top | center
                            (default: center)
+    --attach-norm <x,y>    attach given directly in normalised output
+                           coordinates (overrides --attach); useful when
+                           re-running an asset whose manifest attach is known
     --attach-angle <deg>   optional data-attach-angle
     --map <spec>           "#hex=slot,#hex=slot" to override proposed mapping
     --no-flip              mark the asset as not flippable
+    --keep-parts           keep one path per raw shape instead of merging per
+                           slot, and mark the manifest entry parts: true, so
+                           petals can animate individually
     --write                actually write the asset and manifest entry
                            (without it, dry run: prints the proposal only)
 */
@@ -506,14 +512,16 @@ interface Args {
   type: AssetType;
   size: SizeClass;
   attach: string;
+  attachNorm?: string; // attach given directly in normalised output coords
   attachAngle?: number;
   map?: string;
   noFlip: boolean;
+  keepParts: boolean; // one path per raw shape, for per-petal animation
   write: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
-  const out: Partial<Args> = { attach: "center", noFlip: false, write: false };
+  const out: Partial<Args> = { attach: "center", noFlip: false, keepParts: false, write: false };
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -522,9 +530,11 @@ function parseArgs(argv: string[]): Args {
       case "--type": out.type = argv[++i] as AssetType; break;
       case "--size": out.size = argv[++i] as SizeClass; break;
       case "--attach": out.attach = argv[++i]; break;
+      case "--attach-norm": out.attachNorm = argv[++i]; break;
       case "--attach-angle": out.attachAngle = Number(argv[++i]); break;
       case "--map": out.map = argv[++i]; break;
       case "--no-flip": out.noFlip = true; break;
+      case "--keep-parts": out.keepParts = true; break;
       case "--write": out.write = true; break;
       default: positional.push(a);
     }
@@ -566,18 +576,25 @@ async function main() {
   const norm: Mat = [scale, 0, 0, scale, -cx * scale, -cy * scale];
 
   // attach point
-  let attachRaw: Pt;
-  switch (args.attach) {
-    case "center": attachRaw = { x: cx, y: cy }; break;
-    case "bottom": attachRaw = { x: cx, y: bb.maxY }; break;
-    case "top": attachRaw = { x: cx, y: bb.minY }; break;
-    default: {
-      const [x, y] = args.attach.split(",").map(Number);
-      if (x === undefined || y === undefined || Number.isNaN(x) || Number.isNaN(y)) throw new Error(`bad --attach ${args.attach}`);
-      attachRaw = { x, y };
+  let attach: Pt;
+  if (args.attachNorm) {
+    const [x, y] = args.attachNorm.split(",").map(Number);
+    if (x === undefined || y === undefined || Number.isNaN(x) || Number.isNaN(y)) throw new Error(`bad --attach-norm ${args.attachNorm}`);
+    attach = { x, y };
+  } else {
+    let attachRaw: Pt;
+    switch (args.attach) {
+      case "center": attachRaw = { x: cx, y: cy }; break;
+      case "bottom": attachRaw = { x: cx, y: bb.maxY }; break;
+      case "top": attachRaw = { x: cx, y: bb.minY }; break;
+      default: {
+        const [x, y] = args.attach.split(",").map(Number);
+        if (x === undefined || y === undefined || Number.isNaN(x) || Number.isNaN(y)) throw new Error(`bad --attach ${args.attach}`);
+        attachRaw = { x, y };
+      }
     }
+    attach = apply(norm, attachRaw);
   }
-  const attach = apply(norm, attachRaw);
   const attachStr = `${Math.round(attach.x * 10) / 10},${Math.round(attach.y * 10) / 10}`;
 
   // group shapes by slot, preserving document paint order
@@ -600,8 +617,17 @@ async function main() {
   if (args.noFlip) attrs.push(`data-no-flip=""`);
 
   let svg = `<svg ${attrs.join(" ")}>`;
-  for (const [slot, entry] of ordered) {
-    svg += `<path fill="var(--${slot})" d="${entry.subs.map(subToD).join("")}"/>`;
+  if (args.keepParts) {
+    // one path per raw shape (petal), document order, so grow.ts can
+    // animate parts individually
+    for (const sh of [...shapes].sort((a, b) => a.order - b.order)) {
+      const slot = mapping.get(sh.fill)!;
+      svg += `<path fill="var(--${slot})" d="${sh.subs.map((s) => subToD(transformSub(s, norm))).join("")}"/>`;
+    }
+  } else {
+    for (const [slot, entry] of ordered) {
+      svg += `<path fill="var(--${slot})" d="${entry.subs.map(subToD).join("")}"/>`;
+    }
   }
   svg += `</svg>`;
 
@@ -616,6 +642,8 @@ async function main() {
             removeUnknownsAndDefaults: { keepDataAttrs: true },
             convertPathData: { floatPrecision: 2 },
             cleanupNumericValues: { floatPrecision: 2 },
+            // keep-parts assets must stay one path per petal
+            ...(args.keepParts ? { mergePaths: false } : {}),
           },
         },
       },
@@ -649,7 +677,7 @@ async function main() {
   const manifest: { assets: Record<string, unknown>[] } = existsSync(manifestPath)
     ? JSON.parse(readFileSync(manifestPath, "utf8"))
     : { assets: [] };
-  const entry = {
+  const entry: Record<string, unknown> = {
     id: args.id,
     file: relFile,
     type: args.type,
@@ -658,6 +686,7 @@ async function main() {
     flip: !args.noFlip,
     sizeClass: args.size,
   };
+  if (args.keepParts) entry.parts = true;
   const existing = manifest.assets.findIndex((a) => a.id === args.id);
   if (existing >= 0) manifest.assets[existing] = entry;
   else manifest.assets.push(entry);

@@ -12,6 +12,7 @@ export interface AssetMeta {
   attach: [number, number];
   flip: boolean;
   sizeClass: SizeClass;
+  parts?: boolean; // one element per petal; grow.ts animates them individually
 }
 
 export interface LoadedAsset extends AssetMeta {
