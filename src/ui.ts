@@ -14,9 +14,16 @@ export interface PanelState {
   density: number;
   curviness: number;
   stems: boolean; // off = packed posy, no stems or vase
+  disabled: Set<string>; // asset ids excluded from generation
   sway: number;
   speed: number;
   view: "bouquet" | "sheet" | "vases";
+}
+
+export interface PanelAsset {
+  id: string;
+  label: string;
+  kind: "head" | "leaf";
 }
 
 export interface PanelCallbacks {
@@ -27,7 +34,12 @@ export interface PanelCallbacks {
   onSwayLive(): void; // sway slider moves are applied live, no regeneration
 }
 
-export function createPanel(root: HTMLElement, state: PanelState, cb: PanelCallbacks): { sync(): void } {
+export function createPanel(
+  root: HTMLElement,
+  state: PanelState,
+  assets: PanelAsset[],
+  cb: PanelCallbacks,
+): { sync(): void } {
   root.innerHTML = `
     <div class="section">
       <div class="heading">seed</div>
@@ -57,6 +69,10 @@ export function createPanel(root: HTMLElement, state: PanelState, cb: PanelCallb
       <div class="slider-row"><span>sway</span><input type="range" id="sway" min="0" max="2" step="0.1" value="${state.sway}"><em id="sway-val"></em></div>
       <div class="slider-row"><span>speed</span><input type="range" id="speed" min="0.5" max="2" step="0.1" value="${state.speed}"><em id="speed-val"></em></div>
     </div>
+    <div class="section">
+      <div class="heading">flowers</div><div class="pills" id="asset-heads"></div>
+      <div class="heading" style="margin-top: 8px">leaves</div><div class="pills" id="asset-leaves"></div>
+    </div>
     <div class="section"><div class="heading">view</div><div class="pills" id="views"></div></div>
     <div class="section"><button id="export" class="wide">export svg</button></div>
   `;
@@ -81,7 +97,30 @@ export function createPanel(root: HTMLElement, state: PanelState, cb: PanelCallb
     };
   };
 
+  // asset toggles: lit pill = included in generation
+  const assetPills = (containerId: string, kind: "head" | "leaf") => {
+    const el = $(containerId);
+    for (const a of assets.filter((x) => x.kind === kind)) {
+      const b = document.createElement("button");
+      b.textContent = a.label;
+      b.dataset.id = a.id;
+      b.addEventListener("click", () => {
+        if (state.disabled.has(a.id)) state.disabled.delete(a.id);
+        else state.disabled.add(a.id);
+        cb.onChange(false);
+      });
+      el.appendChild(b);
+    }
+    return () => {
+      el.querySelectorAll("button").forEach((b) =>
+        b.classList.toggle("active", !state.disabled.has(b.dataset.id!)),
+      );
+    };
+  };
+
   const syncFns = [
+    assetPills("asset-heads", "head"),
+    assetPills("asset-leaves", "leaf"),
     pills("palettes", PALETTES.map((p) => p.name), () => PALETTES[state.paletteIndex]!.name, (name) => {
       state.paletteIndex = PALETTES.findIndex((p) => p.name === name);
     }),

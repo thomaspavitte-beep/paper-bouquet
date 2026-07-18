@@ -28,6 +28,7 @@ const state: AppState = {
   density: 1,
   curviness: 1,
   stems: true,
+  disabled: new Set<string>(),
   sway: 1,
   speed: 1,
   view: "bouquet",
@@ -59,6 +60,8 @@ function readURL() {
   state.density = Math.min(1.5, Math.max(0.5, num("dn", 1)));
   state.curviness = Math.min(2, Math.max(0, num("cv", 1)));
   state.stems = q.get("st") !== "0";
+  const off = q.get("off");
+  state.disabled = new Set(off ? off.split(",").filter(Boolean) : []);
   state.sway = Math.min(2, Math.max(0, num("sw", 1)));
   state.speed = Math.min(2, Math.max(0.5, num("sp", 1)));
 }
@@ -76,6 +79,7 @@ function writeURL() {
     sw: String(state.sway),
     sp: String(state.speed),
   });
+  if (state.disabled.size) q.set("off", [...state.disabled].join(","));
   history.replaceState(null, "", `${location.pathname}?${q}`);
 }
 
@@ -144,11 +148,31 @@ function inkFor(ground: string): string {
   return lum > 140 ? "#2b2825" : "#f2e8d5";
 }
 
+/* the library minus toggled-off assets. A bouquet always needs at least one
+   head, so empty pools fall back rather than crash: no larges = any enabled
+   head can be focal; nothing enabled = the toggles are ignored. Leaves may
+   genuinely be empty; the generators skip them. */
+function filteredLib(): Library {
+  const on = (a: { id: string }) => !state.disabled.has(a.id);
+  let heads = {
+    large: lib.heads.large.filter(on),
+    medium: lib.heads.medium.filter(on),
+    small: lib.heads.small.filter(on),
+  };
+  const anyOn = [...heads.large, ...heads.medium, ...heads.small];
+  if (anyOn.length === 0) heads = lib.heads;
+  else {
+    if (!heads.large.length) heads = { ...heads, large: anyOn };
+    if (!heads.medium.length) heads = { ...heads, medium: anyOn };
+  }
+  return { heads, leaves: lib.leaves.filter(on), sprigs: lib.sprigs, byId: lib.byId };
+}
+
 function bouquetSvg(vaseSeed: number, bloomSeed: number, showTag: boolean): string {
   const palette = PALETTES[state.paletteIndex]!;
   const forced = state.silhouette === "auto" ? undefined : state.silhouette;
   const vase = generateVase(mulberry32(vaseSeed), palette, forced, `s${vaseSeed}-${bloomSeed}`);
-  const arr = generateArrangement(mulberry32(bloomSeed), palette, lib, {
+  const arr = generateArrangement(mulberry32(bloomSeed), palette, filteredLib(), {
     mouthHalf: vase.mouthHalf,
     width: vase.width,
     height: vase.height,
@@ -220,7 +244,7 @@ function render(animate: boolean) {
     stage.innerHTML = `<div class="sheet">${cells}</div>`;
   }
   writeURL();
-  panel.sync();
+  panel?.sync();
 }
 
 function applyDice() {
@@ -240,47 +264,49 @@ document.getElementById("quickDice")!.addEventListener("click", () => {
   applyDice();
 });
 
-const panel = createPanel(panelEl, state, {
-  onDice: applyDice,
-  onReplay() {
-    if (state.view !== "bouquet") state.view = "bouquet";
-    render(true);
-  },
-  onExport() {
-    downloadSvg(lib, {
-      vaseSeed: state.vaseSeed,
-      bloomSeed: state.bloomSeed,
-      paletteIndex: state.paletteIndex,
-      silhouette: state.silhouette === "auto" ? undefined : state.silhouette,
-      mediums: state.mediums ?? undefined,
-      density: state.density,
-      curviness: state.curviness,
-      stems: state.stems,
-    });
-  },
-  onChange(animate) {
-    render(animate);
-  },
-  onSwayLive() {
-    liveOpts.sway = state.sway;
-    writeURL();
-  },
+const exportParams = () => ({
+  vaseSeed: state.vaseSeed,
+  bloomSeed: state.bloomSeed,
+  paletteIndex: state.paletteIndex,
+  silhouette: state.silhouette === "auto" ? undefined : state.silhouette,
+  mediums: state.mediums ?? undefined,
+  density: state.density,
+  curviness: state.curviness,
+  stems: state.stems,
 });
+
+// the panel is built once the library arrives, since the asset toggles list it
+let panel: { sync(): void } | null = null;
 
 readURL();
 loadLibrary().then((l) => {
   lib = l;
+  const assets = [...lib.byId.values()]
+    .filter((a) => a.type === "head" || a.type === "leaf")
+    .map((a) => ({
+      id: a.id,
+      label: a.id.replace(/^(head|leaf)-/, ""),
+      kind: a.type as "head" | "leaf",
+    }));
+  panel = createPanel(panelEl, state, assets, {
+    onDice: applyDice,
+    onReplay() {
+      if (state.view !== "bouquet") state.view = "bouquet";
+      render(true);
+    },
+    onExport() {
+      downloadSvg(filteredLib(), exportParams());
+    },
+    onChange(animate) {
+      render(animate);
+    },
+    onSwayLive() {
+      liveOpts.sway = state.sway;
+      writeURL();
+    },
+  });
   render(true);
   // console convenience for checking export output without downloading
   (window as unknown as Record<string, unknown>).__pbExport = () =>
-    exportSvg(lib, {
-      vaseSeed: state.vaseSeed,
-      bloomSeed: state.bloomSeed,
-      paletteIndex: state.paletteIndex,
-      silhouette: state.silhouette === "auto" ? undefined : state.silhouette,
-      mediums: state.mediums ?? undefined,
-      density: state.density,
-      curviness: state.curviness,
-      stems: state.stems,
-    });
+    exportSvg(filteredLib(), exportParams());
 });

@@ -135,39 +135,48 @@ export function grow(svg: SVGSVGElement, seed: number, opts: GrowOptions = { spe
         const parts = isBloom ? bloomParts(pieceEl) : null;
 
         if (isBloom && parts) {
-          const primaries = parts
-            .filter((p) => p.getAttribute("fill") === "var(--primary)")
-            .map((p) => {
-              const b = p.getBBox();
-              return { p, cx: b.x + b.width / 2, cy: b.y + b.height / 2 };
-            });
-          // petals around the flower unfold clockwise from the top; layered
-          // flowers (all parts near the centre) keep their stacking order
-          if (primaries.some((w) => Math.hypot(w.cx, w.cy) > 12)) {
-            primaries.sort(
+          const withCentre = parts.map((p) => {
+            const b = p.getBBox();
+            return { p, dist: Math.hypot(b.x + b.width / 2, b.y + b.height / 2), cx: b.x + b.width / 2, cy: b.y + b.height / 2 };
+          });
+          const primaries = withCentre.filter((w) => w.p.getAttribute("fill") === "var(--primary)");
+          // body pieces near the centre come first, then petals unfold
+          // clockwise from the top; everything non-primary is the seed and
+          // pops together on top at the end
+          const core = primaries.filter((w) => w.dist < 12);
+          const petals = primaries
+            .filter((w) => w.dist >= 12)
+            .sort(
               (a, b) =>
                 ((Math.atan2(a.cx, -a.cy) + Math.PI * 2) % (Math.PI * 2)) -
                 ((Math.atan2(b.cx, -b.cy) + Math.PI * 2) % (Math.PI * 2)),
             );
-          }
-          const seq: SVGGraphicsElement[] = [
-            ...primaries.map((w) => w.p),
-            ...parts.filter((p) => p.getAttribute("fill") !== "var(--primary)"),
-          ];
+          const seq = [...core, ...petals];
           const base = u.start + u.dur - 70 / speed;
           const stagger = 85 / speed;
-          seq.forEach((partEl, i) => {
-            const isSeed = i >= primaries.length;
+          seq.forEach((w, i) => {
             const piece: Piece = {
-              el: partEl,
+              el: w.p,
               at: { x: 0, y: 0 },
-              triggerAt: base + i * stagger + (isSeed ? 50 / speed : 0),
-              dur: (isSeed ? 470 : 300) / speed,
-              overshoot: isSeed ? 1.7 : 1.25,
+              triggerAt: base + i * stagger,
+              dur: 300 / speed,
+              overshoot: 1.25,
             };
             units[ui]!.pieces.push(piece);
             lastEvent = Math.max(lastEvent, piece.triggerAt + piece.dur);
           });
+          const seedAt = base + seq.length * stagger + 50 / speed;
+          for (const w of withCentre.filter((x) => x.p.getAttribute("fill") !== "var(--primary)")) {
+            const piece: Piece = {
+              el: w.p,
+              at: { x: 0, y: 0 },
+              triggerAt: seedAt,
+              dur: 470 / speed,
+              overshoot: 1.7,
+            };
+            units[ui]!.pieces.push(piece);
+            lastEvent = Math.max(lastEvent, piece.triggerAt + piece.dur);
+          }
           continue;
         }
 

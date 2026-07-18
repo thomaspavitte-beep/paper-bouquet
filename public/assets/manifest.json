@@ -150,6 +150,86 @@
       ],
       "flip": true,
       "sizeClass": "small"
+    },
+    {
+      "id": "head-swoop-bloom",
+      "file": "heads/head-swoop-bloom.svg",
+      "type": "head",
+      "slots": [
+        "primary",
+        "centre",
+        "detail"
+      ],
+      "attach": [
+        0,
+        0
+      ],
+      "flip": true,
+      "sizeClass": "large",
+      "parts": true
+    },
+    {
+      "id": "head-windmill",
+      "file": "heads/head-windmill.svg",
+      "type": "head",
+      "slots": [
+        "primary",
+        "centre",
+        "secondary"
+      ],
+      "attach": [
+        0,
+        0
+      ],
+      "flip": true,
+      "sizeClass": "large",
+      "parts": true
+    },
+    {
+      "id": "head-sunburst",
+      "file": "heads/head-sunburst.svg",
+      "type": "head",
+      "slots": [
+        "primary"
+      ],
+      "attach": [
+        0.6,
+        1.3
+      ],
+      "flip": true,
+      "sizeClass": "medium",
+      "parts": true
+    },
+    {
+      "id": "head-bottlebrush",
+      "file": "heads/head-bottlebrush.svg",
+      "type": "head",
+      "slots": [
+        "accent",
+        "secondary",
+        "primary"
+      ],
+      "attach": [
+        0,
+        50
+      ],
+      "flip": true,
+      "sizeClass": "medium",
+      "parts": true
+    },
+    {
+      "id": "leaf-fern",
+      "file": "leaves/leaf-fern.svg",
+      "type": "leaf",
+      "slots": [
+        "primary"
+      ],
+      "attach": [
+        -20.4,
+        50
+      ],
+      "flip": true,
+      "sizeClass": "medium"
     }
   ]
 }

@@ -246,6 +246,7 @@ export function generateArrangement(
   const units: Unit[] = [];
 
   const leafMarkup = (at: Pt, tangentDeg: number, side: number, scale: number): string => {
+    if (!lib.leaves.length) return ""; // every leaf toggled off
     const asset = pick(rng, lib.leaves);
     const flip = side > 0 && asset.flip;
     const natural = flip ? -naturalAngle(asset) : naturalAngle(asset);
@@ -285,7 +286,8 @@ export function generateArrangement(
         const t = ts[li]!;
         const at = qPoint(stem, t);
         if (at.y > -6) continue; // keep leaves clear of the mouth line
-        unit.mid.push(piece(t, at, leafMarkup(at, angleOf(qTangent(stem, t)), side, (W * range(rng, 0.2, 0.28)) / 100)));
+        const leaf = leafMarkup(at, angleOf(qTangent(stem, t)), side, (W * range(rng, 0.2, 0.28)) / 100);
+        if (leaf) unit.mid.push(piece(t, at, leaf));
         side = -side;
       }
 
@@ -338,7 +340,8 @@ export function generateArrangement(
       // pulled toward upright so edge-of-fan leaves never lie sideways
       const tangentDeg = angleOf(qTangent(stem, 1)) * 0.65;
       const side = stem.tip.x >= 0 ? 1 : -1;
-      unit.mid.push(piece(1, stem.tip, leafMarkup(stem.tip, tangentDeg, side * 0.25, (W * range(rng, 0.22, 0.3)) / 100)));
+      const leaf = leafMarkup(stem.tip, tangentDeg, side * 0.25, (W * range(rng, 0.22, 0.3)) / 100);
+      if (leaf) unit.mid.push(piece(1, stem.tip, leaf));
     }
   }
 
@@ -466,7 +469,7 @@ function generateCluster(
     tipY: number;
   }
   const leaves: CLeaf[] = [];
-  const K = Math.round(heads.length * range(rng, 1.1, 1.5));
+  const K = lib.leaves.length ? Math.round(heads.length * range(rng, 1.1, 1.5)) : 0;
   for (let k = 0; k < K; k++) {
     const thetaDeg = (k / K) * 360 + range(rng, -14, 14);
     const th = (thetaDeg * Math.PI) / 180;
