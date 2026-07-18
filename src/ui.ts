@@ -13,6 +13,7 @@ export interface PanelState {
   mediums: number | null; // null = seeded
   density: number;
   curviness: number;
+  stems: boolean; // off = packed posy, no stems or vase
   sway: number;
   speed: number;
   view: "bouquet" | "sheet" | "vases";
@@ -44,6 +45,9 @@ export function createPanel(root: HTMLElement, state: PanelState, cb: PanelCallb
     <div class="section"><div class="heading">vase</div><div class="pills" id="silhouettes"></div></div>
     <div class="section">
       <div class="heading">shape</div>
+      <div class="row checks" style="margin: 0 0 8px">
+        <label><input type="checkbox" id="stems" checked> stems</label>
+      </div>
       <div class="slider-row"><span>blooms</span><input type="range" id="mediums" min="1" max="5" step="1" value="1"><em id="mediums-val">auto</em></div>
       <div class="slider-row"><span>density</span><input type="range" id="density" min="0.5" max="1.5" step="0.05" value="${state.density}"><em id="density-val"></em></div>
       <div class="slider-row"><span>curve</span><input type="range" id="curviness" min="0" max="2" step="0.1" value="${state.curviness}"><em id="curviness-val"></em></div>
@@ -106,6 +110,10 @@ export function createPanel(root: HTMLElement, state: PanelState, cb: PanelCallb
   $<HTMLInputElement>("lockBlooms").addEventListener("change", (e) => {
     state.lockBlooms = (e.target as HTMLInputElement).checked;
   });
+  $<HTMLInputElement>("stems").addEventListener("change", (e) => {
+    state.stems = (e.target as HTMLInputElement).checked;
+    cb.onChange(true); // mode change deserves a fresh growth
+  });
 
   const slider = (id: string, apply: (v: number) => void, live = false) => {
     const el = $<HTMLInputElement>(id);
@@ -140,6 +148,7 @@ export function createPanel(root: HTMLElement, state: PanelState, cb: PanelCallb
     seedInput.value = String(state.seed);
     $<HTMLInputElement>("lockVase").checked = state.lockVase;
     $<HTMLInputElement>("lockBlooms").checked = state.lockBlooms;
+    $<HTMLInputElement>("stems").checked = state.stems;
     $<HTMLInputElement>("mediums").value = String(state.mediums ?? 1);
     $("mediums-val").textContent = state.mediums === null ? "auto" : String(state.mediums);
     $<HTMLInputElement>("density").value = String(state.density);

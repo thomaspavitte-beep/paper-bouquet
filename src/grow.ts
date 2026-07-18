@@ -30,7 +30,7 @@ interface Piece {
 }
 
 interface UnitAnim {
-  stemEl: SVGPathElement;
+  stemEl?: SVGPathElement; // cluster mode units have no stem
   len: number;
   start: number;
   dur: number;
@@ -83,15 +83,15 @@ export function grow(svg: SVGSVGElement, seed: number, opts: GrowOptions = { spe
 
   const units: UnitAnim[] = [];
   for (const [, els] of [...byUnit.entries()].sort((a, b) => a[0] - b[0])) {
-    const stemEl = els.map((e) => e.querySelector<SVGPathElement>(".pb-stem")).find(Boolean);
-    if (!stemEl) continue;
-    const len = stemEl.getTotalLength();
+    const stemEl = els.map((e) => e.querySelector<SVGPathElement>(".pb-stem")).find(Boolean) ?? undefined;
     const first = els[0]!;
+    // stemless (cluster) units carry their stagger order in data-len
+    const len = stemEl ? stemEl.getTotalLength() : Number(first.dataset.len ?? 0);
     units.push({
       stemEl,
       len,
       start: 0,
-      dur: (520 + len * 1.6) / speed,
+      dur: (stemEl ? 520 + len * 1.6 : 300) / speed,
       rotEls: els,
       base: parsePt(first.dataset.base ?? null),
       pieces: [],
@@ -103,11 +103,13 @@ export function grow(svg: SVGSVGElement, seed: number, opts: GrowOptions = { spe
     });
   }
 
-  // stagger: longest stems first
+  // stagger: longest stems first (in cluster mode data-len encodes
+  // centre-outward order, and the pace tightens for the bigger unit count)
   const order = [...units].sort((a, b) => b.len - a.len);
-  const VASE_DUR = 620 / speed;
+  const stemless = units.every((u) => !u.stemEl);
+  const VASE_DUR = (stemless ? 0 : 620) / speed;
   order.forEach((u, i) => {
-    u.start = (380 + i * 130) / speed;
+    u.start = ((stemless ? 200 : 380) + i * (stemless ? 90 : 130)) / speed;
   });
 
   // collect pieces and blooms with trigger times mapped through the easing
@@ -190,8 +192,8 @@ export function grow(svg: SVGSVGElement, seed: number, opts: GrowOptions = { spe
   // initial state, set synchronously before first paint
   if (vase) vase.setAttribute("opacity", "0");
   for (const u of units) {
-    u.stemEl.setAttribute("stroke-dasharray", String(u.len));
-    u.stemEl.setAttribute("stroke-dashoffset", String(u.len));
+    u.stemEl?.setAttribute("stroke-dasharray", String(u.len));
+    u.stemEl?.setAttribute("stroke-dashoffset", String(u.len));
     for (const p of u.pieces) {
       p.el.setAttribute("transform", `translate(${p.at.x} ${p.at.y}) scale(0.001) translate(${-p.at.x} ${-p.at.y})`);
     }
@@ -215,7 +217,7 @@ export function grow(svg: SVGSVGElement, seed: number, opts: GrowOptions = { spe
     for (const u of units) {
       const p = clamp01((t - u.start) / u.dur);
       const e = easeOutCubic(p);
-      u.stemEl.setAttribute("stroke-dashoffset", String(u.len * (1 - e)));
+      u.stemEl?.setAttribute("stroke-dashoffset", String(u.len * (1 - e)));
       for (const piece of u.pieces) {
         const pp = clamp01((t - piece.triggerAt) / piece.dur);
         const s = pp <= 0 ? 0.001 : Math.max(0.001, backOut(pp, piece.overshoot));

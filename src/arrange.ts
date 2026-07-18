@@ -21,16 +21,18 @@ export interface Arrangement {
   markup: string;
   headCount: number;
   sprigCount: number;
+  bounds?: { x: number; y: number; w: number; h: number }; // cluster mode only
 }
 
 export interface ArrangeOptions {
   mediums?: number; // medium head count; default draws 2 to 4 from the seed
   density: number; // 0.5 sparse to 1.5 lush; scales fillers and leaf counts
   curviness: number; // 0 near-straight to 2 bowed stems
+  stems: boolean; // false = tightly packed posy of heads and leaves, no stems or vase
   literal: boolean; // substitute slot variables with real colours, no animation hooks
 }
 
-const DEFAULT_OPTS: ArrangeOptions = { density: 1, curviness: 1, literal: false };
+const DEFAULT_OPTS: ArrangeOptions = { density: 1, curviness: 1, stems: true, literal: false };
 
 interface Pt {
   x: number;
@@ -99,6 +101,7 @@ export function generateArrangement(
   options?: Partial<ArrangeOptions>,
 ): Arrangement {
   const opts: ArrangeOptions = { ...DEFAULT_OPTS, ...options };
+  if (!opts.stems) return generateCluster(rng, palette, lib, vase, opts);
   const W = Math.max(vase.width * range(rng, 1.35, 1.7), 120); // arrangement width
   const H = vase.height * range(rng, 1.5, 2.1); // arrangement height above mouth
   const accent = palette.blooms[palette.accentIndex]!;
@@ -368,5 +371,191 @@ export function generateArrangement(
     markup: `<g>${stemLayer}</g><g>${midLayer}</g><g>${headLayer}</g>`,
     headCount: heads.length,
     sprigCount: fillers.filter((f) => f.kind === "sprig").length,
+  };
+}
+
+/* ---------------------------------------------------------------- cluster
+   Stems off: a tightly packed posy. Heads pack greedily toward the centre
+   within the overlap rule, leaves tuck around the fringe behind them.
+   Growth blooms centre-outward (data-len drives the stagger order), sway
+   becomes a tiny per-flower breathe around each head's own centre. */
+
+function generateCluster(
+  rng: Rng,
+  palette: Palette,
+  lib: Library,
+  vase: VaseShape,
+  opts: ArrangeOptions,
+): Arrangement {
+  const W = Math.max(vase.width * range(rng, 1.35, 1.7), 120);
+  const accent = palette.blooms[palette.accentIndex]!;
+  const green = palette.green;
+  const focalR = W * range(rng, 0.24, 0.3); // noticeably larger than stem mode
+
+  const bloomPool = [...palette.blooms].filter((b) => b !== accent);
+  for (let i = bloomPool.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [bloomPool[i], bloomPool[j]] = [bloomPool[j]!, bloomPool[i]!];
+  }
+  let bloomIdx = 0;
+  const nextBloom = (avoid: ReadonlySet<string>) => {
+    for (let k = 0; k < bloomPool.length; k++) {
+      const c = bloomPool[(bloomIdx + k) % bloomPool.length]!;
+      if (!avoid.has(c)) {
+        bloomIdx += k + 1;
+        return c;
+      }
+    }
+    return bloomPool[0]!;
+  };
+
+  interface CHead {
+    asset: LoadedAsset;
+    x: number;
+    y: number;
+    r: number;
+    primary: string;
+  }
+  const heads: CHead[] = [
+    { asset: pick(rng, lib.heads.large), x: 0, y: 0, r: focalR, primary: accent },
+  ];
+
+  const drawn = rangeInt(rng, 5, 8); // stream-stable whether or not overridden
+  const count = Math.max(3, Math.min(12, Math.round((opts.mediums ?? drawn) * opts.density)));
+  const mediumAssets = [...lib.heads.medium];
+  for (let k = 0; k < count; k++) {
+    const r = focalR * range(rng, 0.58, 0.85);
+    let best: { x: number; y: number; score: number } | null = null;
+    for (let attempt = 0; attempt < 90; attempt++) {
+      const theta = rng() * Math.PI * 2;
+      const d = range(rng, focalR * 0.6, focalR * 3.4);
+      const x = Math.cos(theta) * d;
+      const y = Math.sin(theta) * d;
+      const c = { x, y, r };
+      // tighter than stem mode: real overlaps, and every head must nestle
+      // against the cluster (the circles overestimate the tulip cups, so
+      // touching circles still reads as a snug pack)
+      if (heads.some((h) => overlapFraction({ x: h.x, y: h.y, r: h.r }, c) > 0.24)) continue;
+      const nearest = Math.min(...heads.map((h) => Math.hypot(h.x - x, h.y - y) - (h.r + r)));
+      if (nearest > -r * 0.08) continue;
+      const score = Math.hypot(x, y * 1.2); // slight horizontal spread
+      if (!best || score < best.score) best = { x, y, score };
+    }
+    if (!best) continue;
+    const avoid = new Set<string>([accent]);
+    for (const h of heads) {
+      if (Math.hypot(h.x - best.x, h.y - best.y) < h.r + r + 8) avoid.add(h.primary);
+    }
+    const asset = mediumAssets.length
+      ? mediumAssets.splice(Math.floor(rng() * mediumAssets.length), 1)[0]!
+      : pick(rng, lib.heads.medium);
+    heads.push({ asset, x: best.x, y: best.y, r, primary: nextBloom(avoid) });
+  }
+
+  // fringe leaves: bases tucked behind the cluster edge, pointing outward
+  const cx = heads.reduce((a, h) => a + h.x, 0) / heads.length;
+  const cy = heads.reduce((a, h) => a + h.y, 0) / heads.length;
+  interface CLeaf {
+    asset: LoadedAsset;
+    bx: number;
+    by: number;
+    rotation: number;
+    scale: number;
+    flip: boolean;
+    tipX: number;
+    tipY: number;
+  }
+  const leaves: CLeaf[] = [];
+  const K = Math.round(heads.length * range(rng, 1.1, 1.5));
+  for (let k = 0; k < K; k++) {
+    const thetaDeg = (k / K) * 360 + range(rng, -14, 14);
+    const th = (thetaDeg * Math.PI) / 180;
+    const dx = Math.sin(th);
+    const dy = -Math.cos(th);
+    let edge = 0;
+    for (const h of heads) {
+      edge = Math.max(edge, (h.x - cx) * dx + (h.y - cy) * dy + h.r);
+    }
+    const leafLen = focalR * range(rng, 0.9, 1.3);
+    const inset = focalR * range(rng, 0.55, 0.75); // bases buried under the flowers
+    const bx = cx + dx * (edge - inset);
+    const by = cy + dy * (edge - inset);
+    const asset = pick(rng, lib.leaves);
+    const flip = dx >= 0 && asset.flip;
+    const natural = flip ? -naturalAngle(asset) : naturalAngle(asset);
+    const target = thetaDeg + range(rng, -18, 18);
+    leaves.push({
+      asset,
+      bx,
+      by,
+      rotation: target - natural,
+      scale: leafLen / 100,
+      flip,
+      tipX: bx + dx * leafLen,
+      tipY: by + dy * leafLen,
+    });
+  }
+
+  // markup: leaves behind, heads sorted large-behind-small; every element in
+  // its own pb-rot so grow.ts can order blooms and breathe each one
+  const lit = opts.literal;
+  let u = 0;
+  const maxDist = Math.max(...heads.map((h) => Math.hypot(h.x, h.y) + h.r));
+  const rot = (base: string, len: number, inner: string) =>
+    lit ? `<g>${inner}</g>` : `<g class="pb-rot" data-u="${u++}" data-base="${base}" data-len="${r2(len)}">${inner}</g>`;
+
+  const leavesLayer = leaves
+    .map((l) => {
+      const inner = instantiate(l.asset, {
+        x: l.bx,
+        y: l.by,
+        scale: l.scale,
+        rotation: l.rotation,
+        flip: l.flip,
+        colours: { primary: green },
+      }, lit);
+      const wrapped = lit
+        ? inner
+        : `<g class="pb-piece" data-t="1" data-at="${r2(l.bx)},${r2(l.by)}">${inner}</g>`;
+      return rot(`${r2(l.bx)},${r2(l.by)}`, range(rng, 1, 8), wrapped);
+    })
+    .join("");
+
+  const headLayer = [...heads]
+    .sort((a, b) => b.r - a.r)
+    .map((h) => {
+      const others = palette.blooms.filter((b) => b !== h.primary);
+      const centre = pick(rng, others);
+      const inner = instantiate(h.asset, {
+        x: h.x,
+        y: h.y,
+        scale: h.r / 50,
+        rotation: range(rng, -14, 14),
+        flip: h.asset.flip && rng() < 0.5,
+        colours: {
+          primary: h.primary,
+          secondary: pick(rng, others.filter((c) => c !== centre).concat(centre)),
+          centre,
+          accent,
+          detail: palette.ground,
+        },
+      }, lit);
+      const wrapped = lit ? inner : `<g class="pb-bloom" data-at="${r2(h.x)},${r2(h.y)}">${inner}</g>`;
+      // focal (largest distance score inverted): centre blooms first
+      return rot(`${r2(h.x)},${r2(h.y)}`, maxDist - Math.hypot(h.x, h.y) + 40, wrapped);
+    })
+    .join("");
+
+  const xs = [...heads.map((h) => h.x - h.r), ...heads.map((h) => h.x + h.r), ...leaves.map((l) => l.tipX)];
+  const ys = [...heads.map((h) => h.y - h.r), ...heads.map((h) => h.y + h.r), ...leaves.map((l) => l.tipY)];
+  const pad = 16;
+  const minX = Math.min(...xs) - pad;
+  const minY = Math.min(...ys) - pad;
+
+  return {
+    markup: `<g>${leavesLayer}</g><g>${headLayer}</g>`,
+    headCount: heads.length,
+    sprigCount: 0,
+    bounds: { x: minX, y: minY, w: Math.max(...xs) + pad - minX, h: Math.max(...ys) + pad - minY },
   };
 }

@@ -27,6 +27,7 @@ const state: AppState = {
   mediums: null,
   density: 1,
   curviness: 1,
+  stems: true,
   sway: 1,
   speed: 1,
   view: "bouquet",
@@ -57,6 +58,7 @@ function readURL() {
   if (md && md !== "auto" && Number(md) >= 2) state.mediums = Math.min(5, Math.trunc(Number(md)));
   state.density = Math.min(1.5, Math.max(0.5, num("dn", 1)));
   state.curviness = Math.min(2, Math.max(0, num("cv", 1)));
+  state.stems = q.get("st") !== "0";
   state.sway = Math.min(2, Math.max(0, num("sw", 1)));
   state.speed = Math.min(2, Math.max(0.5, num("sp", 1)));
 }
@@ -70,6 +72,7 @@ function writeURL() {
     md: state.mediums === null ? "auto" : String(state.mediums),
     dn: String(state.density),
     cv: String(state.curviness),
+    st: state.stems ? "1" : "0",
     sw: String(state.sway),
     sp: String(state.speed),
   });
@@ -153,13 +156,20 @@ function bouquetSvg(vaseSeed: number, bloomSeed: number, showTag: boolean): stri
     mediums: state.mediums ?? undefined,
     density: state.density,
     curviness: state.curviness,
+    stems: state.stems,
   });
   const tag = showTag ? `<div class="tag">${bloomSeed}</div>` : "";
+  // cluster mode: no vase, and the cell frame comes from the cluster bounds
+  const viewBox = state.stems
+    ? "-165 -345 330 510"
+    : arr.bounds
+      ? `${arr.bounds.x} ${arr.bounds.y} ${arr.bounds.w} ${arr.bounds.h}`
+      : "-165 -165 330 330";
   return `
     <div class="cell">${tag}
-      <svg viewBox="-165 -345 330 510">
+      <svg viewBox="${viewBox}">
         ${arr.markup}
-        <g class="pb-vase">${vase.markup}</g>
+        ${state.stems ? `<g class="pb-vase">${vase.markup}</g>` : ""}
       </svg>
     </div>`;
 }
@@ -245,6 +255,7 @@ const panel = createPanel(panelEl, state, {
       mediums: state.mediums ?? undefined,
       density: state.density,
       curviness: state.curviness,
+      stems: state.stems,
     });
   },
   onChange(animate) {
@@ -270,5 +281,6 @@ loadLibrary().then((l) => {
       mediums: state.mediums ?? undefined,
       density: state.density,
       curviness: state.curviness,
+      stems: state.stems,
     });
 });
