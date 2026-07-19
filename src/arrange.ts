@@ -423,35 +423,34 @@ function generateCluster(
     { asset: pick(rng, lib.heads.large), x: 0, y: 0, r: focalR, primary: accent },
   ];
 
-  const drawn = rangeInt(rng, 5, 8); // stream-stable whether or not overridden
-  const count = Math.max(3, Math.min(12, Math.round((opts.mediums ?? drawn) * opts.density)));
-  const mediumAssets = [...lib.heads.medium];
+  const drawn = rangeInt(rng, 6, 9); // stream-stable whether or not overridden
+  const count = Math.max(3, Math.min(14, Math.round((opts.mediums ?? drawn) * opts.density)));
+  // every head asset is fair game at any scale, so sizes can vary freely
+  const headPool = [...lib.heads.large, ...lib.heads.medium, ...lib.heads.small];
+  const unused = [...headPool];
   for (let k = 0; k < count; k++) {
-    const r = focalR * range(rng, 0.58, 0.85);
+    const r = focalR * range(rng, 0.35, 0.85); // some big, some small
     let best: { x: number; y: number; score: number } | null = null;
-    for (let attempt = 0; attempt < 90; attempt++) {
+    for (let attempt = 0; attempt < 120; attempt++) {
+      // land tangent to an existing head, then reject any overlap: packed
+      // tight but never on top of each other
+      const anchor = pick(rng, heads);
       const theta = rng() * Math.PI * 2;
-      const d = range(rng, focalR * 0.6, focalR * 3.4);
-      const x = Math.cos(theta) * d;
-      const y = Math.sin(theta) * d;
-      const c = { x, y, r };
-      // tighter than stem mode: real overlaps, and every head must nestle
-      // against the cluster (the circles overestimate the tulip cups, so
-      // touching circles still reads as a snug pack)
-      if (heads.some((h) => overlapFraction({ x: h.x, y: h.y, r: h.r }, c) > 0.24)) continue;
-      const nearest = Math.min(...heads.map((h) => Math.hypot(h.x - x, h.y - y) - (h.r + r)));
-      if (nearest > -r * 0.08) continue;
+      const d = anchor.r + r + range(rng, 1, 4);
+      const x = anchor.x + Math.cos(theta) * d;
+      const y = anchor.y + Math.sin(theta) * d;
+      if (heads.some((h) => Math.hypot(h.x - x, h.y - y) < h.r + r + 1)) continue;
       const score = Math.hypot(x, y * 1.2); // slight horizontal spread
       if (!best || score < best.score) best = { x, y, score };
     }
     if (!best) continue;
     const avoid = new Set<string>([accent]);
     for (const h of heads) {
-      if (Math.hypot(h.x - best.x, h.y - best.y) < h.r + r + 8) avoid.add(h.primary);
+      if (Math.hypot(h.x - best.x, h.y - best.y) < h.r + r + 10) avoid.add(h.primary);
     }
-    const asset = mediumAssets.length
-      ? mediumAssets.splice(Math.floor(rng() * mediumAssets.length), 1)[0]!
-      : pick(rng, lib.heads.medium);
+    const asset = unused.length
+      ? unused.splice(Math.floor(rng() * unused.length), 1)[0]!
+      : pick(rng, headPool);
     heads.push({ asset, x: best.x, y: best.y, r, primary: nextBloom(avoid) });
   }
 
