@@ -1,6 +1,45 @@
 /* Curated palettes, named and versioned. Rules per BRIEF.md: one ground,
    one green, 4 to 6 bloom colours, at least one high-chroma accent. */
 
+/* Three flat foliage tones derived from a palette's green: darker, base,
+   lighter, with a little hue drift so overlapping leaves and stems separate
+   instead of blending into one silhouette. */
+export function greenShades(green: string): [string, string, string] {
+  const n = parseInt(green.slice(1), 16);
+  const [h, s, l] = rgbToHsl((n >> 16) & 255, (n >> 8) & 255, n & 255);
+  return [
+    hslToHex(h - 8, s, Math.max(0.08, l - 0.08)),
+    green,
+    hslToHex(h + 8, Math.max(0, s - 0.05), Math.min(0.85, l + 0.1)),
+  ];
+}
+
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h: number;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+  else if (max === g) h = ((b - r) / d + 2) * 60;
+  else h = ((r - g) / d + 4) * 60;
+  return [h, s, l];
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  h = ((h % 360) + 360) % 360;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  const [r, g, b] =
+    h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  const to = (v: number) => Math.round((v + m) * 255).toString(16).padStart(2, "0");
+  return `#${to(r)}${to(g)}${to(b)}`;
+}
+
 export interface Palette {
   name: string;
   version: number;

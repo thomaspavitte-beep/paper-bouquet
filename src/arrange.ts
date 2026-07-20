@@ -8,7 +8,7 @@
    bases tuck behind the vase. */
 
 import { type Rng, range, rangeInt, pick } from "./rng";
-import type { Palette } from "./palette";
+import { greenShades, type Palette } from "./palette";
 import { type Library, type LoadedAsset, instantiate, naturalAngle } from "./assets";
 
 export interface VaseShape {
@@ -229,7 +229,10 @@ export function generateArrangement(
   });
 
   // ---- render layers
-  const green = palette.green;
+  // three foliage tones so overlapping greens separate: stems lean on the
+  // darker pair, leaves use the full range
+  const greens = greenShades(palette.green);
+  const stemGreens = [greens[0], greens[1]];
   const stemW = range(rng, 2.3, 3.1);
 
   /* Each stem and everything riding it forms a unit. grow.ts finds units by
@@ -240,6 +243,7 @@ export function generateArrangement(
     base: Pt;
     stemD: string;
     stemWidth: number;
+    green: string; // this unit's stem tone
     mid: string[]; // pb-piece groups
     head?: { markup: string; r: number; at: Pt };
   }
@@ -257,7 +261,7 @@ export function generateArrangement(
       scale,
       rotation: target - natural,
       flip,
-      colours: { primary: green },
+      colours: { primary: pick(rng, greens) },
     }, opts.literal);
   };
 
@@ -272,6 +276,7 @@ export function generateArrangement(
       base: stem.base,
       stemD: stemD(stem),
       stemWidth: isSprig ? stemW * 0.7 : stemW,
+      green: pick(rng, stemGreens),
       mid: [],
     };
     units.push(unit);
@@ -329,7 +334,7 @@ export function generateArrangement(
         const len = job.length * range(rng, 0.14, 0.22);
         const end: Pt = { x: at.x + Math.sin(branchAngle) * len, y: at.y - Math.cos(branchAngle) * len };
         unit.mid.push(piece(t, at,
-          `<path d="M${r2(at.x)},${r2(at.y)}L${r2(end.x)},${r2(end.y)}" stroke="${green}" stroke-width="${r2(stemW * 0.55)}" stroke-linecap="round"/>` +
+          `<path d="M${r2(at.x)},${r2(at.y)}L${r2(end.x)},${r2(end.y)}" stroke="${unit.green}" stroke-width="${r2(stemW * 0.55)}" stroke-linecap="round"/>` +
           `<circle cx="${r2(end.x)}" cy="${r2(end.y)}" r="${r2(berryR)}" fill="${berryColour}"/>`));
         side = -side;
       }
@@ -355,7 +360,7 @@ export function generateArrangement(
 
   const stemLayer = units
     .map((u, i) => rot(u, i,
-      `<path${opts.literal ? "" : ` class="pb-stem"`} d="${u.stemD}" fill="none" stroke="${green}" stroke-width="${r2(u.stemWidth)}" stroke-linecap="round"/>`))
+      `<path${opts.literal ? "" : ` class="pb-stem"`} d="${u.stemD}" fill="none" stroke="${u.green}" stroke-width="${r2(u.stemWidth)}" stroke-linecap="round"/>`))
     .join("");
   const midLayer = units
     .map((u, i) => (u.mid.length ? rot(u, i, u.mid.join("")) : ""))
@@ -392,7 +397,7 @@ function generateCluster(
 ): Arrangement {
   const W = Math.max(vase.width * range(rng, 1.35, 1.7), 120);
   const accent = palette.blooms[palette.accentIndex]!;
-  const green = palette.green;
+  const greens = greenShades(palette.green); // varied leaf tones for depth
   const focalR = W * range(rng, 0.24, 0.3); // noticeably larger than stem mode
 
   const bloomPool = [...palette.blooms].filter((b) => b !== accent);
@@ -514,7 +519,7 @@ function generateCluster(
         scale: l.scale,
         rotation: l.rotation,
         flip: l.flip,
-        colours: { primary: green },
+        colours: { primary: pick(rng, greens) },
       }, lit);
       const wrapped = lit
         ? inner
