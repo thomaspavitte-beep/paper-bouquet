@@ -36,6 +36,7 @@ interface UnitAnim {
   dur: number;
   rotEls: SVGGElement[];
   base: { x: number; y: number };
+  sensor: { x: number; y: number }; // where the flower feels the cursor
   pieces: Piece[];
   // sway parameters
   amp: number;
@@ -43,6 +44,9 @@ interface UnitAnim {
   w2: number;
   p1: number;
   p2: number;
+  // cursor disturbance: an angular spring on top of the sway
+  da: number; // degrees
+  dv: number; // degrees per second
 }
 
 const easeOutCubic = (p: number) => 1 - Math.pow(1 - p, 3);
@@ -87,19 +91,23 @@ export function grow(svg: SVGSVGElement, seed: number, opts: GrowOptions = { spe
     const first = els[0]!;
     // stemless (cluster) units carry their stagger order in data-len
     const len = stemEl ? stemEl.getTotalLength() : Number(first.dataset.len ?? 0);
+    const base = parsePt(first.dataset.base ?? null);
     units.push({
       stemEl,
       len,
       start: 0,
       dur: (stemEl ? 520 + len * 1.6 : 300) / speed,
       rotEls: els,
-      base: parsePt(first.dataset.base ?? null),
+      base,
+      sensor: { ...base }, // refined to the bloom position during collection
       pieces: [],
       amp: 0.55 + rng() * 0.65,
       w1: 0.55 + rng() * 0.35,
       w2: 1.4 + rng() * 0.5,
       p1: rng() * Math.PI * 2,
       p2: rng() * Math.PI * 2,
+      da: 0,
+      dv: 0,
     });
   }
 
@@ -132,6 +140,10 @@ export function grow(svg: SVGSVGElement, seed: number, opts: GrowOptions = { spe
     for (const el of u.rotEls) {
       for (const pieceEl of el.querySelectorAll<SVGGElement>(".pb-piece, .pb-bloom")) {
         const isBloom = pieceEl.classList.contains("pb-bloom");
+        // the flower head (or a sprig tip) is where the cursor is felt
+        if (isBloom || Number(pieceEl.dataset.t ?? 0) === 1) {
+          units[ui]!.sensor = parsePt(pieceEl.dataset.at ?? null);
+        }
         const parts = isBloom ? bloomParts(pieceEl) : null;
 
         if (isBloom && parts) {
@@ -210,11 +222,40 @@ export function grow(svg: SVGSVGElement, seed: number, opts: GrowOptions = { spe
 
   let raf = 0;
   let t0 = -1;
+  let prevNow = -1;
   const SWAY_RAMP = 1800;
+
+  /* cursor disturbance: moving the pointer near a flower nudges its unit in
+     the direction of travel; an underdamped spring wobbles it back into the
+     sway. Impulses land in SVG user space so the feel is zoom-independent. */
+  const SPRING_K = 45; // 1/s^2
+  const SPRING_C = 4.5; // 1/s
+  const REACH = 65; // user units around the flower
+  let lastPointer: { x: number; y: number } | null = null;
+  const onPointerMove = (e: PointerEvent) => {
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return;
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+    if (lastPointer) {
+      const dx = Math.max(-12, Math.min(12, p.x - lastPointer.x));
+      if (dx !== 0) {
+        for (const u of units) {
+          const dist = Math.hypot(p.x - u.sensor.x, p.y - u.sensor.y);
+          if (dist >= REACH) continue;
+          const falloff = (1 - dist / REACH) ** 2;
+          u.dv = Math.max(-120, Math.min(120, u.dv + dx * 5 * falloff));
+        }
+      }
+    }
+    lastPointer = { x: p.x, y: p.y };
+  };
+  svg.addEventListener("pointermove", onPointerMove);
 
   const frame = (now: number) => {
     if (t0 < 0) t0 = now;
     const t = now - t0;
+    const dt = prevNow < 0 ? 0.016 : Math.min(0.05, (now - prevNow) / 1000);
+    prevNow = now;
 
     if (vase) {
       const p = clamp01(t / VASE_DUR);
@@ -234,15 +275,17 @@ export function grow(svg: SVGSVGElement, seed: number, opts: GrowOptions = { spe
       }
     }
 
-    // idle sway, ramping in after the last growth event; amount read live
-    if (t > lastEvent) {
-      const ramp = clamp01((t - lastEvent) / SWAY_RAMP) * Math.max(0, opts.sway);
-      const ts = t / 1000;
-      for (const u of units) {
-        const a = ramp * u.amp * (0.72 * Math.sin(u.w1 * ts + u.p1) + 0.28 * Math.sin(u.w2 * ts + u.p2));
-        const rot = `rotate(${Math.round(a * 100) / 100} ${u.base.x} ${u.base.y})`;
-        for (const el of u.rotEls) el.setAttribute("transform", rot);
-      }
+    // idle sway (ramping in after the last growth event, amount read live)
+    // plus the cursor-disturbance spring, integrated every frame
+    const ramp = t > lastEvent ? clamp01((t - lastEvent) / SWAY_RAMP) * Math.max(0, opts.sway) : 0;
+    const ts = t / 1000;
+    for (const u of units) {
+      u.dv += (-SPRING_K * u.da - SPRING_C * u.dv) * dt;
+      u.da = Math.max(-11, Math.min(11, u.da + u.dv * dt));
+      const a =
+        ramp * u.amp * (0.72 * Math.sin(u.w1 * ts + u.p1) + 0.28 * Math.sin(u.w2 * ts + u.p2)) + u.da;
+      const rot = `rotate(${Math.round(a * 100) / 100} ${u.base.x} ${u.base.y})`;
+      for (const el of u.rotEls) el.setAttribute("transform", rot);
     }
 
     raf = requestAnimationFrame(frame);
@@ -252,6 +295,7 @@ export function grow(svg: SVGSVGElement, seed: number, opts: GrowOptions = { spe
   return {
     destroy() {
       cancelAnimationFrame(raf);
+      svg.removeEventListener("pointermove", onPointerMove);
     },
   };
 }
