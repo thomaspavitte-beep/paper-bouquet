@@ -186,21 +186,6 @@
       "parts": true
     },
     {
-      "id": "head-sunburst",
-      "file": "heads/head-sunburst.svg",
-      "type": "head",
-      "slots": [
-        "primary"
-      ],
-      "attach": [
-        0.6,
-        1.3
-      ],
-      "flip": true,
-      "sizeClass": "medium",
-      "parts": true
-    },
-    {
       "id": "head-bottlebrush",
       "file": "heads/head-bottlebrush.svg",
       "type": "head",
