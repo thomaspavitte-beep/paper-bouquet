@@ -24,15 +24,17 @@ export interface Arrangement {
   bounds?: { x: number; y: number; w: number; h: number }; // cluster mode only
 }
 
+export type ArrangeMode = "stems" | "posy" | "wreath";
+
 export interface ArrangeOptions {
   mediums?: number; // medium head count; default draws 2 to 4 from the seed
   density: number; // 0.5 sparse to 1.5 lush; scales fillers and leaf counts
   curviness: number; // 0 near-straight to 2 bowed stems
-  stems: boolean; // false = tightly packed posy of heads and leaves, no stems or vase
+  mode: ArrangeMode; // stems = vased bouquet; posy and wreath have no stems or vase
   literal: boolean; // substitute slot variables with real colours, no animation hooks
 }
 
-const DEFAULT_OPTS: ArrangeOptions = { density: 1, curviness: 1, stems: true, literal: false };
+const DEFAULT_OPTS: ArrangeOptions = { density: 1, curviness: 1, mode: "stems", literal: false };
 
 interface Pt {
   x: number;
@@ -93,6 +95,48 @@ interface PlacedHead {
   primary: string;
 }
 
+/* In the stemless modes a head should sit centred on its packing circle,
+   but instantiate() places the attach point. For directional assets (tulip,
+   bottlebrush) the attach is at the base, so compute where to put the attach
+   so the asset's visual centre lands on the target instead. */
+function attachForCentre(
+  asset: LoadedAsset,
+  target: Pt,
+  rotationDeg: number,
+  scale: number,
+  flip: boolean,
+): Pt {
+  const [ax, ay] = asset.attach;
+  const vx = (flip ? ax : -ax) * scale;
+  const vy = -ay * scale;
+  const rad = (rotationDeg * Math.PI) / 180;
+  const rx = vx * Math.cos(rad) - vy * Math.sin(rad);
+  const ry = vx * Math.sin(rad) + vy * Math.cos(rad);
+  return { x: target.x - rx, y: target.y - ry };
+}
+
+/* seeded round-robin over the non-accent blooms, skipping colours a head's
+   neighbours already wear */
+function bloomCycler(rng: Rng, palette: Palette): (avoid: ReadonlySet<string>) => string {
+  const accent = palette.blooms[palette.accentIndex]!;
+  const pool = [...palette.blooms].filter((b) => b !== accent);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [pool[i], pool[j]] = [pool[j]!, pool[i]!];
+  }
+  let idx = 0;
+  return (avoid: ReadonlySet<string>) => {
+    for (let k = 0; k < pool.length; k++) {
+      const c = pool[(idx + k) % pool.length]!;
+      if (!avoid.has(c)) {
+        idx += k + 1;
+        return c;
+      }
+    }
+    return pool[0]!;
+  };
+}
+
 export function generateArrangement(
   rng: Rng,
   palette: Palette,
@@ -101,7 +145,8 @@ export function generateArrangement(
   options?: Partial<ArrangeOptions>,
 ): Arrangement {
   const opts: ArrangeOptions = { ...DEFAULT_OPTS, ...options };
-  if (!opts.stems) return generateCluster(rng, palette, lib, vase, opts);
+  if (opts.mode === "posy") return generateCluster(rng, palette, lib, vase, opts);
+  if (opts.mode === "wreath") return generateWreath(rng, palette, lib, vase, opts);
   const W = Math.max(vase.width * range(rng, 1.35, 1.7), 120); // arrangement width
   const H = vase.height * range(rng, 1.5, 2.1); // arrangement height above mouth
   const accent = palette.blooms[palette.accentIndex]!;
@@ -400,22 +445,7 @@ function generateCluster(
   const greens = greenShades(palette.green); // varied leaf tones for depth
   const focalR = W * range(rng, 0.24, 0.3); // noticeably larger than stem mode
 
-  const bloomPool = [...palette.blooms].filter((b) => b !== accent);
-  for (let i = bloomPool.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [bloomPool[i], bloomPool[j]] = [bloomPool[j]!, bloomPool[i]!];
-  }
-  let bloomIdx = 0;
-  const nextBloom = (avoid: ReadonlySet<string>) => {
-    for (let k = 0; k < bloomPool.length; k++) {
-      const c = bloomPool[(bloomIdx + k) % bloomPool.length]!;
-      if (!avoid.has(c)) {
-        bloomIdx += k + 1;
-        return c;
-      }
-    }
-    return bloomPool[0]!;
-  };
+  const nextBloom = bloomCycler(rng, palette);
 
   interface CHead {
     asset: LoadedAsset;
@@ -533,12 +563,16 @@ function generateCluster(
     .map((h) => {
       const others = palette.blooms.filter((b) => b !== h.primary);
       const centre = pick(rng, others);
+      const rotation = range(rng, -14, 14);
+      const flip = h.asset.flip && rng() < 0.5;
+      const scale = h.r / 50;
+      const at = attachForCentre(h.asset, { x: h.x, y: h.y }, rotation, scale, flip);
       const inner = instantiate(h.asset, {
-        x: h.x,
-        y: h.y,
-        scale: h.r / 50,
-        rotation: range(rng, -14, 14),
-        flip: h.asset.flip && rng() < 0.5,
+        x: at.x,
+        y: at.y,
+        scale,
+        rotation,
+        flip,
         colours: {
           primary: h.primary,
           secondary: pick(rng, others.filter((c) => c !== centre).concat(centre)),
@@ -561,6 +595,208 @@ function generateCluster(
 
   return {
     markup: `<g>${leavesLayer}</g><g>${headLayer}</g>`,
+    headCount: heads.length,
+    sprigCount: 0,
+    bounds: { x: minX, y: minY, w: Math.max(...xs) + pad - minX, h: Math.max(...ys) + pad - minY },
+  };
+}
+
+/* ---------------------------------------------------------------- wreath
+   Heads pack tangentially around a ring whose radius is computed so the
+   circle closes exactly. Directional heads point outward, leaves and berry
+   clusters dress the gaps, and data-len ordering makes the growth travel
+   around the ring flower by flower. */
+
+function generateWreath(
+  rng: Rng,
+  palette: Palette,
+  lib: Library,
+  vase: VaseShape,
+  opts: ArrangeOptions,
+): Arrangement {
+  const W = Math.max(vase.width * range(rng, 1.35, 1.7), 120);
+  const accent = palette.blooms[palette.accentIndex]!;
+  const greens = greenShades(palette.green);
+  const focalR = W * range(rng, 0.2, 0.26);
+  const nextBloom = bloomCycler(rng, palette);
+
+  const drawn = rangeInt(rng, 10, 13); // stream-stable whether or not overridden
+  const base = opts.mediums !== undefined ? opts.mediums * 2.5 : drawn;
+  const n = Math.max(6, Math.min(18, Math.round(base * opts.density)));
+
+  // radii first (head 0 is the accent focal), then the ring radius that
+  // makes the chain of tangent circles close into a loop
+  const radii = [focalR, ...Array.from({ length: n - 1 }, () => focalR * range(rng, 0.45, 0.8))];
+  const gaps = radii.map(() => range(rng, 3, 8));
+  let span = 0;
+  for (let i = 0; i < n; i++) span += radii[i]! + radii[(i + 1) % n]! + gaps[i]!;
+  const R = span / (2 * Math.PI);
+
+  interface WHead {
+    asset: LoadedAsset;
+    x: number;
+    y: number;
+    r: number;
+    theta: number; // radians, 0 = top, clockwise
+    primary: string;
+  }
+  const headPool = [...lib.heads.large, ...lib.heads.medium, ...lib.heads.small];
+  const unused = [...headPool];
+  const heads: WHead[] = [];
+  let theta = rng() * Math.PI * 2;
+  for (let i = 0; i < n; i++) {
+    const r = radii[i]!;
+    const rr = R * range(rng, 0.97, 1.04);
+    const x = Math.sin(theta) * rr;
+    const y = -Math.cos(theta) * rr;
+    let primary: string;
+    if (i === 0) primary = accent;
+    else {
+      const avoid = new Set<string>([accent, heads[i - 1]!.primary]);
+      if (i === n - 1) avoid.add(heads[0]!.primary); // the ring closes
+      primary = nextBloom(avoid);
+    }
+    const asset =
+      i === 0
+        ? pick(rng, lib.heads.large)
+        : unused.length
+          ? unused.splice(Math.floor(rng() * unused.length), 1)[0]!
+          : pick(rng, headPool);
+    heads.push({ asset, x, y, r, theta, primary });
+    theta += (radii[i]! + radii[(i + 1) % n]! + gaps[i]!) / R;
+  }
+
+  // gap dressing: leaves pointing outward (sometimes inward), berry clusters
+  interface GapPiece {
+    markup: string;
+    bx: number;
+    by: number;
+    tips: Pt[];
+  }
+  const gapPieces: GapPiece[] = [];
+  const lit = opts.literal;
+  for (let i = 0; i < n; i++) {
+    const midTheta = heads[i]!.theta + (radii[i]! + gaps[i]! / 2) / R;
+    const outwardDeg = (midTheta * 180) / Math.PI;
+    const dirX = Math.sin(midTheta);
+    const dirY = -Math.cos(midTheta);
+    let markup = "";
+    const tips: Pt[] = [];
+    const baseR = R * range(rng, 0.86, 0.98);
+    const bx = dirX * baseR;
+    const by = dirY * baseR;
+
+    if (lib.leaves.length) {
+      const nLeaves = rangeInt(rng, 1, 2);
+      for (let li = 0; li < nLeaves; li++) {
+        const asset = pick(rng, lib.leaves);
+        const flip = rng() < 0.5 && asset.flip;
+        const natural = flip ? -naturalAngle(asset) : naturalAngle(asset);
+        const target = outwardDeg + range(rng, -38, 38);
+        const scale = (focalR * range(rng, 0.75, 1.05)) / 100;
+        markup += instantiate(asset, {
+          x: bx,
+          y: by,
+          scale,
+          rotation: target - natural,
+          flip,
+          colours: { primary: pick(rng, greens) },
+        }, lit);
+        const tRad = (target * Math.PI) / 180;
+        tips.push({ x: bx + Math.sin(tRad) * scale * 100, y: by - Math.cos(tRad) * scale * 100 });
+      }
+      if (rng() < 0.4) {
+        // a smaller leaf reaching into the ring
+        const asset = pick(rng, lib.leaves);
+        const flip = rng() < 0.5 && asset.flip;
+        const natural = flip ? -naturalAngle(asset) : naturalAngle(asset);
+        const target = outwardDeg + 180 + range(rng, -25, 25);
+        markup += instantiate(asset, {
+          x: dirX * R * 0.96,
+          y: dirY * R * 0.96,
+          scale: (focalR * range(rng, 0.5, 0.7)) / 100,
+          rotation: target - natural,
+          flip,
+          colours: { primary: pick(rng, greens) },
+        }, lit);
+      }
+    }
+    if (rng() < 0.35) {
+      // berry cluster riding the ring line
+      const berryColour = rng() < 0.7 ? accent : pick(rng, palette.blooms);
+      const nBerries = rangeInt(rng, 2, 3);
+      for (let bi = 0; bi < nBerries; bi++) {
+        const a = midTheta + range(rng, -0.06, 0.06);
+        const br = R * range(rng, 0.95, 1.06);
+        markup += `<circle cx="${r2(Math.sin(a) * br)}" cy="${r2(-Math.cos(a) * br)}" r="${r2(range(rng, 2.5, 4.5))}" fill="${berryColour}"/>`;
+      }
+    }
+    gapPieces.push({ markup, bx, by, tips });
+  }
+
+  // markup: gap dressing behind, heads on top; data-len interleaves so the
+  // growth travels around the ring: head 0, gap 0, head 1, gap 1, ...
+  let u = 0;
+  const rot = (basePt: string, len: number, at: Pt | null, inner: string) => {
+    if (lit) return `<g>${inner}</g>`;
+    const wrapped =
+      at === null ? inner : `<g class="pb-piece" data-t="1" data-at="${r2(at.x)},${r2(at.y)}">${inner}</g>`;
+    return `<g class="pb-rot" data-u="${u++}" data-base="${basePt}" data-len="${r2(len)}">${wrapped}</g>`;
+  };
+
+  const BIG = 1000;
+  const gapLayer = gapPieces
+    .map((g, i) =>
+      g.markup ? rot(`${r2(g.bx)},${r2(g.by)}`, BIG - i * 2 - 1, { x: g.bx, y: g.by }, g.markup) : "")
+    .join("");
+  const headLayer = heads
+    .map((h, i) => ({ h, i }))
+    .sort((a, b) => b.h.r - a.h.r)
+    .map(({ h, i }) => {
+      const others = palette.blooms.filter((b) => b !== h.primary);
+      const centre = pick(rng, others);
+      const directional = Math.hypot(h.asset.attach[0], h.asset.attach[1]) > 10;
+      const rotation = directional
+        ? (h.theta * 180) / Math.PI + range(rng, -8, 8)
+        : range(rng, -14, 14);
+      const flip = h.asset.flip && rng() < 0.5;
+      const scale = h.r / 50;
+      const at = attachForCentre(h.asset, { x: h.x, y: h.y }, rotation, scale, flip);
+      const inner = instantiate(h.asset, {
+        x: at.x,
+        y: at.y,
+        scale,
+        rotation,
+        flip,
+        colours: {
+          primary: h.primary,
+          secondary: pick(rng, others.filter((c) => c !== centre).concat(centre)),
+          centre,
+          accent,
+          detail: palette.ground,
+        },
+      }, lit);
+      const wrapped = lit ? inner : `<g class="pb-bloom" data-at="${r2(h.x)},${r2(h.y)}">${inner}</g>`;
+      return rot(`${r2(h.x)},${r2(h.y)}`, BIG - i * 2, null, wrapped);
+    })
+    .join("");
+
+  const xs = [
+    ...heads.map((h) => h.x - h.r),
+    ...heads.map((h) => h.x + h.r),
+    ...gapPieces.flatMap((g) => g.tips.map((t) => t.x)),
+  ];
+  const ys = [
+    ...heads.map((h) => h.y - h.r),
+    ...heads.map((h) => h.y + h.r),
+    ...gapPieces.flatMap((g) => g.tips.map((t) => t.y)),
+  ];
+  const pad = 16;
+  const minX = Math.min(...xs) - pad;
+  const minY = Math.min(...ys) - pad;
+
+  return {
+    markup: `<g>${gapLayer}</g><g>${headLayer}</g>`,
     headCount: heads.length,
     sprigCount: 0,
     bounds: { x: minX, y: minY, w: Math.max(...xs) + pad - minX, h: Math.max(...ys) + pad - minY },

@@ -3,6 +3,7 @@
 
 import { PALETTES } from "./palette";
 import { SILHOUETTES, type Silhouette } from "./vase";
+import type { ArrangeMode } from "./arrange";
 
 export interface PanelState {
   seed: number;
@@ -13,7 +14,7 @@ export interface PanelState {
   mediums: number | null; // null = seeded
   density: number;
   curviness: number;
-  stems: boolean; // off = packed posy, no stems or vase
+  mode: ArrangeMode; // stems = vased bouquet; posy and wreath have no stems or vase
   disabled: Set<string>; // asset ids excluded from generation
   sway: number;
   speed: number;
@@ -57,9 +58,7 @@ export function createPanel(
     <div class="section"><div class="heading">vase</div><div class="pills" id="silhouettes"></div></div>
     <div class="section">
       <div class="heading">shape</div>
-      <div class="row checks" style="margin: 0 0 8px">
-        <label><input type="checkbox" id="stems" checked> stems</label>
-      </div>
+      <div class="pills" id="modes" style="margin-bottom: 8px"></div>
       <div class="slider-row"><span>blooms</span><input type="range" id="mediums" min="1" max="5" step="1" value="1"><em id="mediums-val">auto</em></div>
       <div class="slider-row"><span>density</span><input type="range" id="density" min="0.5" max="1.5" step="0.05" value="${state.density}"><em id="density-val"></em></div>
       <div class="slider-row"><span>curve</span><input type="range" id="curviness" min="0" max="2" step="0.1" value="${state.curviness}"><em id="curviness-val"></em></div>
@@ -80,7 +79,13 @@ export function createPanel(
   const $ = <T extends HTMLElement>(id: string) => root.querySelector<T>(`#${id}`)!;
   const seedInput = $<HTMLInputElement>("seed");
 
-  const pills = <T extends string>(id: string, items: readonly T[], get: () => T, set: (v: T) => void) => {
+  const pills = <T extends string>(
+    id: string,
+    items: readonly T[],
+    get: () => T,
+    set: (v: T) => void,
+    animate = false,
+  ) => {
     const el = $(id);
     for (const item of items) {
       const b = document.createElement("button");
@@ -88,7 +93,7 @@ export function createPanel(
       b.dataset.value = item;
       b.addEventListener("click", () => {
         set(item);
-        cb.onChange(false);
+        cb.onChange(animate);
       });
       el.appendChild(b);
     }
@@ -121,6 +126,10 @@ export function createPanel(
   const syncFns = [
     assetPills("asset-heads", "head"),
     assetPills("asset-leaves", "leaf"),
+    pills("modes", ["stems", "posy", "wreath"] as const, () => state.mode, (m) => {
+      state.mode = m;
+    }, true), // a mode switch deserves a fresh growth
+
     pills("palettes", PALETTES.map((p) => p.name), () => PALETTES[state.paletteIndex]!.name, (name) => {
       state.paletteIndex = PALETTES.findIndex((p) => p.name === name);
     }),
@@ -148,10 +157,6 @@ export function createPanel(
   });
   $<HTMLInputElement>("lockBlooms").addEventListener("change", (e) => {
     state.lockBlooms = (e.target as HTMLInputElement).checked;
-  });
-  $<HTMLInputElement>("stems").addEventListener("change", (e) => {
-    state.stems = (e.target as HTMLInputElement).checked;
-    cb.onChange(true); // mode change deserves a fresh growth
   });
 
   const slider = (id: string, apply: (v: number) => void, live = false) => {
@@ -187,7 +192,6 @@ export function createPanel(
     seedInput.value = String(state.seed);
     $<HTMLInputElement>("lockVase").checked = state.lockVase;
     $<HTMLInputElement>("lockBlooms").checked = state.lockBlooms;
-    $<HTMLInputElement>("stems").checked = state.stems;
     $<HTMLInputElement>("mediums").value = String(state.mediums ?? 1);
     $("mediums-val").textContent = state.mediums === null ? "auto" : String(state.mediums);
     $<HTMLInputElement>("density").value = String(state.density);

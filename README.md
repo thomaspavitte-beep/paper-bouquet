@@ -4,7 +4,7 @@ A generative bouquet builder in the cut-paper folk style. Every generation grows
 
 **[Grow a bouquet](https://thomaspavitte-beep.github.io/paper-bouquet/)** - the public page. One button; a click anywhere grows a new one.
 
-**[Studio](https://thomaspavitte-beep.github.io/paper-bouquet/studio.html)** - the full tool: seeds, locks, palettes, vase silhouettes, shape and motion sliders, a packed posy mode without stems, per-asset toggles, contact sheets, and print-ready SVG export. Seed and parameters live in the URL, so any result is shareable.
+**[Studio](https://thomaspavitte-beep.github.io/paper-bouquet/studio.html)** - the full tool: seeds, locks, palettes, vase silhouettes, shape and motion sliders, packed posy and wreath modes without stems, per-asset toggles, contact sheets, and print-ready SVG export. Seed and parameters live in the URL, so any result is shareable.
 
 Artwork by [Thomas Pavitte](https://thomaspavitte.com). Built with Claude Code.
 
@@ -12,7 +12,7 @@ Artwork by [Thomas Pavitte](https://thomaspavitte.com). Built with Claude Code.
 
 - **Assets.** Flower heads and leaves are drawn in Illustrator and normalised by a pipeline script into contract-compliant SVGs: a shared viewBox, palette-slot colours (`var(--primary)` and friends) instead of literal fills, a recorded stem attach point, and one path per petal so blooms can animate part by part. The generator only ever reads the manifest.
 - **Vases** are parametric: five silhouettes (capsule, trapezoid, flared, urn, cylinder with lip) filled with a seeded band grammar of stripes, checkers, and blocks, governed by rules that keep them looking designed rather than random.
-- **Arrangement** places one focal bloom off-centre, supporting heads at distinct heights within an overlap budget, stems as single gentle curves fanning from the vase mouth, leaves alternating along stems, and parametric berry sprigs filling the angular gaps. With stems off, a packing algorithm nestles large flowers into a tight posy instead.
+- **Arrangement** places one focal bloom off-centre, supporting heads at distinct heights within an overlap budget, stems as single gentle curves fanning from the vase mouth, leaves alternating along stems, and parametric berry sprigs filling the angular gaps. With stems off, a packing algorithm nestles large flowers into a tight posy, or chains them tangentially around a closed ring for a wreath.
 - **Growth** is a small requestAnimationFrame timeline: the vase rises, stems draw on longest first, each leaf unfolds as the stem passes it, and petals bloom clockwise before the seed lands on top. Idle sway is a layered-sine rotation around each stem base. `prefers-reduced-motion` skips straight to the finished bouquet.
 - Everything derives from the seed. Same seed, same parameters, same bouquet, every time.
 

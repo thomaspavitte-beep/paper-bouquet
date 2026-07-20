@@ -27,7 +27,7 @@ const state: AppState = {
   mediums: null,
   density: 1,
   curviness: 1,
-  stems: true,
+  mode: "stems",
   disabled: new Set<string>(),
   sway: 1,
   speed: 1,
@@ -59,7 +59,9 @@ function readURL() {
   if (md && md !== "auto" && Number(md) >= 2) state.mediums = Math.min(5, Math.trunc(Number(md)));
   state.density = Math.min(1.5, Math.max(0.5, num("dn", 1)));
   state.curviness = Math.min(2, Math.max(0, num("cv", 1)));
-  state.stems = q.get("st") !== "0";
+  const mode = q.get("mode");
+  if (mode === "stems" || mode === "posy" || mode === "wreath") state.mode = mode;
+  else if (q.get("st") === "0") state.mode = "posy"; // legacy stems-off links
   const off = q.get("off");
   state.disabled = new Set(off ? off.split(",").filter(Boolean) : []);
   state.sway = Math.min(2, Math.max(0, num("sw", 1)));
@@ -75,7 +77,7 @@ function writeURL() {
     md: state.mediums === null ? "auto" : String(state.mediums),
     dn: String(state.density),
     cv: String(state.curviness),
-    st: state.stems ? "1" : "0",
+    mode: state.mode,
     sw: String(state.sway),
     sp: String(state.speed),
   });
@@ -180,11 +182,11 @@ function bouquetSvg(vaseSeed: number, bloomSeed: number, showTag: boolean): stri
     mediums: state.mediums ?? undefined,
     density: state.density,
     curviness: state.curviness,
-    stems: state.stems,
+    mode: state.mode,
   });
   const tag = showTag ? `<div class="tag">${bloomSeed}</div>` : "";
   // cluster mode: no vase, and the cell frame comes from the cluster bounds
-  const viewBox = state.stems
+  const viewBox = state.mode === "stems"
     ? "-165 -345 330 510"
     : arr.bounds
       ? `${arr.bounds.x} ${arr.bounds.y} ${arr.bounds.w} ${arr.bounds.h}`
@@ -193,7 +195,7 @@ function bouquetSvg(vaseSeed: number, bloomSeed: number, showTag: boolean): stri
     <div class="cell">${tag}
       <svg viewBox="${viewBox}">
         ${arr.markup}
-        ${state.stems ? `<g class="pb-vase">${vase.markup}</g>` : ""}
+        ${state.mode === "stems" ? `<g class="pb-vase">${vase.markup}</g>` : ""}
       </svg>
     </div>`;
 }
@@ -272,7 +274,7 @@ const exportParams = () => ({
   mediums: state.mediums ?? undefined,
   density: state.density,
   curviness: state.curviness,
-  stems: state.stems,
+  mode: state.mode,
 });
 
 // the panel is built once the library arrives, since the asset toggles list it
